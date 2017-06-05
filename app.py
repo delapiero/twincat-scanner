@@ -1,5 +1,4 @@
 ﻿import os
-import sys
 import tkinter as tk
 from tkinter import *
 from tkinter import ttk
@@ -39,16 +38,16 @@ type_sizes = {
 	"DT" : 4,
 	"POINTER" : 4,
 }
-		
+
 class Application(tk.Frame):
 	def __init__(self, master=None):
 		super().__init__(master)
-		
+
 		self.grid(row=0, column=0, sticky=N+S+E+W)
 
 		Grid.columnconfigure(self, 0, weight=1)
 		Grid.rowconfigure(self, 3, weight=1)
-	
+
 		self.create_widgets()
 
 	def create_widgets(self):
@@ -66,8 +65,8 @@ class Application(tk.Frame):
 		self.dir_process.grid(row=2, column=0, sticky=W+E+N+S)
 
 		self.memory_areas_list = ttk.Treeview(self, columns=("name","offset","size","type", "buffer", "map"))
-		ysb = ttk.Scrollbar(orient=VERTICAL, command= self.memory_areas_list.yview)
-		xsb = ttk.Scrollbar(orient=HORIZONTAL, command= self.memory_areas_list.xview)
+		ysb = ttk.Scrollbar(orient=VERTICAL, command=self.memory_areas_list.yview)
+		xsb = ttk.Scrollbar(orient=HORIZONTAL, command=self.memory_areas_list.xview)
 		self.memory_areas_list['yscroll'] = ysb.set
 		self.memory_areas_list['xscroll'] = xsb.set
 
@@ -90,11 +89,11 @@ class Application(tk.Frame):
 
 		self.quit = tk.Button(self, text="Wyjście", command=root.destroy)
 		self.quit.grid(row=5, column=0, sticky=W+E+N+S)
-		
+
 		self.status = StringVar()
 		self.status_label = tk.Label(self, textvariable = self.status)
 		self.status_label.grid(row=6, column=0, sticky=W+E+N+S)
-		
+
 
 	def dir_select_command(self):
 		tmp_dir = tk.filedialog.askdirectory()
@@ -102,95 +101,157 @@ class Application(tk.Frame):
 		self.dir_path.insert(0, tmp_dir)
 
 	def dir_process_command(self):
-		memory_areas = self.process_lines(self.get_lines(self.dir_path.get()))
+		lines, global_constants, global_type_structs = self.get_lines(self.dir_path.get())
+		memory_areas = self.process_lines(lines, global_constants, global_type_structs)
 		self.memory_areas_list.delete(*self.memory_areas_list.get_children())
 		for area in memory_areas:
-			area_description = str(area.offset) + "    " + area.var_name + "    " + area.type_name + "    " + area.buffer
+			area_description = str(area.offset) + "	" + area.var_name + "	" + area.type_name + "	" + area.buffer
 			self.memory_areas_list.insert('', 'end', text=area.var_name,values=[str(area.offset),area.size,area.type_name,area.buffer,self.get_map(area.offset,area.size)],tag='monospace')
 
 	def get_lines(self,rootdir):
 		self.status.set("wczytuje pliki")
 		lines = []
+		global_constants = {}
+		global_type_structs = {}
 		for root, subfolders, files in os.walk(rootdir):
 			for path in files:
 				print(path)
 				if not path.upper().endswith("BAK"):
 					with open(os.path.join(root,path),'r', errors='surrogateescape') as file:
-						for line in file:
-							try:
-								if "%MB" in line:
-									print(line)
-									lines.append(line)
-							except Exception as e:
-								print(str(e))
-		self.status.set("")
-		return lines
+						file_content = file.read()
 
-	def process_lines(self,lines):
-		self.status.set("przetwarzam pliki")
+						comments = self.get_text_blocks(file_content,"(*","*)")
+						for comment in comments:
+							file_content = file_content.replace(comment,"")
+
+						constant_blocks = self.get_text_blocks(file_content,"VAR_GLOBAL CONSTANT","END_VAR")
+						for constant_block in constant_blocks:
+							constants = constant_block.strip().lstrip("VAR_GLOBAL CONSTANT").rstrip("END_VAR").strip().split(";")
+							for constant in constants:
+								if ":=" in constant:
+									operator_split = constant.split(":=")
+									if ":" in operator_split[0]:
+										type_split = operator_split[0].split(":")
+										global_constant_name = type_split[0].split()[-1].strip()
+										global_constant_value = operator_split[1].strip()
+										if not global_constant_name.isdigit() and global_constant_value.isdigit():
+											global_constants[global_constant_name] = global_constant_value
+											print("CONSTANT " + global_constant_name + " := " + global_constant_value)
+
+						type_struct_blocks = self.get_text_blocks(file_content,"TYPE","END_TYPE")
+						for type_struct_block in type_struct_blocks:
+							type_struct_block = type_struct_block.strip().lstrip("TYPE").rstrip("END_TYPE").strip()
+							if "STRUCT" in type_struct_block:
+								type_struct_size = 0
+								struct_split = type_struct_block.split("STRUCT")
+								type_struct_name = struct_split[0].strip().rstrip(":").strip()
+								field_split = struct_split[1].split(";")
+								for field in field_split:
+									if ":" in field:
+										field_type_split = field.split(":")
+										field_type = field_type_split[1].strip()
+										if field_type in type_sizes:
+											type_struct_size = type_struct_size + type_sizes[field_type]
+								global_type_structs[type_struct_name] = type_struct_size
+								print("TYPE " + type_struct_name + " := " + str(type_struct_size))
+
+						file_content = file_content.split(";")
+						for line in file_content:
+							if "%MB" in line:
+								lines.append(line)
+
+		self.status.set("")
+		return lines, global_constants, global_type_structs
+
+	def get_text_blocks(self, file_content, block_start, block_end):
+		blocks = []
+		block_start_index = file_content.find(block_start)
+		block_end_index = file_content.find(block_end)
+		while(block_start_index > -1 and block_end_index > -1 and block_start_index < block_end_index):
+			block_end_index = block_end_index + len(block_end)
+			block = file_content[block_start_index:block_end_index]
+			blocks.append(block)
+			block_start_index = block_start_index + len(block_start)	
+			block_start_index = file_content.find(block_start, block_start_index)
+			block_end_index = file_content.find(block_end, block_end_index)
+		return blocks
+
+	def process_lines(self, lines, global_constants, global_type_structs):
+		self.status.set("przetwarzam pliki")	
 		memory_areas = []
 		for line in lines:
-			tmp_area = memory_area()
-			tmp_area.buffer = line
-			
-			name_split = line.split("%MB")
-			if len(name_split) == 2:
-				offset_split = name_split[1].split(":")
-				
+			memory_area = self.process_memory(line)
+			memory_areas.append(memory_area)
 
-				tmp_area.var_name = name_split[0].strip()
-				if tmp_area.var_name.endswith("(*"):
-					continue
-				if tmp_area.var_name.endswith("AT"):
-					tmp_area.var_name = tmp_area.var_name.rstrip("AT")
+		for area in memory_areas:
+			area.size = self.get_size(area.type_name, global_constants)
 
-				offset_str = offset_split[0].strip()
-				if offset_str.endswith("*)"):
-					continue
-				tmp_area.offset = int(offset_str)
-
-				tmp_area.type_name = offset_split[1].strip()
-				if tmp_area.type_name.endswith(";"):
-					tmp_area.type_name = tmp_area.type_name.rstrip(";")
-					
-				tmp_area.size = self.get_size(tmp_area.type_name)
-
-			memory_areas.append(tmp_area)
 		memory_areas.sort()
 		self.status.set("")
 		return memory_areas
-		
-	def get_size(self,type_name):
+
+	def process_memory(self, line):
+		tmp_area = memory_area()
+		tmp_area.buffer = line
+
+		name_split = line.split("%MB")
+		if len(name_split) == 2:
+			offset_split = name_split[1].split(":")
+
+			tmp_area.var_name = name_split[0].strip()
+			if tmp_area.var_name.endswith("AT"):
+				tmp_area.var_name = tmp_area.var_name.rstrip("AT")
+			tmp_area.var_name = tmp_area.var_name.split()[-1]
+
+			offset_str = offset_split[0].strip()
+			tmp_area.offset = int(offset_str)
+
+			tmp_area.type_name = offset_split[1].strip()
+			if tmp_area.type_name.endswith(";"):
+				tmp_area.type_name = tmp_area.type_name.rstrip(";")
+
+		return tmp_area
+
+	def get_size(self, type_name, global_constants):
 		if type_name.startswith("POINTER"):
 			return type_sizes["POINTER"]
 		elif type_name.startswith("ARRAY"):
-			array_type_and_range = type_name.split("OF")
-			array_indexes = array_type_and_range[0].split(",")
-			array_total_size = 1
-			for array_index in array_indexes:
-				array_ranges = array_index.strip().lstrip("ARRAY").strip().lstrip("[").rstrip("]").split("..")
-				if array_ranges[0].isdigit() and array_ranges[1].isdigit():
-					array_start = int(array_ranges[0])
-					array_end = int(array_ranges[1])
-					array_size = array_end - array_start + 1
-					array_total_size = array_total_size * array_size	
-			array_type = array_type_and_range[1].strip()
-			array_type_size = 1
-			if array_type in type_sizes:
-				array_type_size = type_sizes[array_type]
-			return array_total_size * array_type_size
+			return self.get_array_size(type_name, global_constants)
 		elif type_name in type_sizes:
 			return type_sizes[type_name]
 		else:
 			return 0
-			
+
+	def get_array_size(self, type_name, global_constants):
+		array_type_and_range = type_name.split("OF")
+		array_indexes = array_type_and_range[0].split(",")
+		array_total_size = 1
+		for array_index in array_indexes:
+			array_ranges = array_index.strip().lstrip("ARRAY").strip().lstrip("[").rstrip("]").split("..")
+			if array_ranges[0] in global_constants:
+				array_ranges[0] = global_constants[array_ranges[0]]
+			if array_ranges[1] in global_constants:
+				array_ranges[1] = global_constants[array_ranges[1]]
+			range1_ok = array_ranges[0].isdigit()
+			range2_ok = array_ranges[1].isdigit()
+			if range1_ok and range2_ok:
+				array_start = int(array_ranges[0])
+				array_end = int(array_ranges[1])
+				array_size = array_end - array_start + 1
+				array_total_size = array_total_size * array_size
+		array_type = array_type_and_range[1].strip()
+		array_type_size = 1
+		if array_type in type_sizes:
+			array_type_size = type_sizes[array_type]
+		return array_total_size * array_type_size
+
 	def get_map(self,offset,size):
-		map = ""
+		memmap = ""
 		for i in range(offset):
-			map = map + " "
+			memmap = memmap + " "
 		for i in range(size):
-			map = map + "#"
-		return map
+			memmap = memmap + "#"
+		return memmap
 
 root = tk.Tk()
 Grid.rowconfigure(root, 0, weight=1)
