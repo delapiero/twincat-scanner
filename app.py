@@ -15,31 +15,36 @@ class memory_area:
 	def __lt__(self, other):
 		return self.offset < other.offset
 
-type_sizes = {
-	"BOOL" : 1,
-	"BYTE" : 1,
-	"WORD" : 2,
-	"DWORD" : 4,
-	"SINT" : 1,
-	"INT" : 2,
-	"DINT" : 4,
-	"LINT" : 8,
-	"USINT" : 1,
-	"UINT" : 2,
-	"UDINT" : 4,
-	"ULINT" : 8,
-	"REAL" : 4,
-	"LREAL" : 8,
-	"TIME" : 4,
-	"TIME_OF_DAY" : 4,
-	"TOD" : 4,
-	"DATE" : 4,
-	"DATE_AND_TIME" : 4,
-	"DT" : 4,
-	"POINTER" : 4,
-}
-
 class Application(tk.Frame):
+
+	type_sizes = {
+		"BOOL" : 1,
+		"BYTE" : 1,
+		"WORD" : 2,
+		"DWORD" : 4,
+		"SINT" : 1,
+		"INT" : 2,
+		"DINT" : 4,
+		"LINT" : 8,
+		"USINT" : 1,
+		"UINT" : 2,
+		"UDINT" : 4,
+		"ULINT" : 8,
+		"REAL" : 4,
+		"LREAL" : 8,
+		"TIME" : 4,
+		"TIME_OF_DAY" : 4,
+		"TOD" : 4,
+		"DATE" : 4,
+		"DATE_AND_TIME" : 4,
+		"DT" : 4,
+		"POINTER" : 4,
+	}
+
+	global_constants = {
+		"MAX_STRING_LENGTH" : 80
+	}
+
 	def __init__(self, master=None):
 		super().__init__(master)
 
@@ -81,10 +86,10 @@ class Application(tk.Frame):
 		self.memory_areas_list.column('#2', stretch=tk.NO)
 		self.memory_areas_list.column('#3', stretch=tk.NO)
 		self.memory_areas_list.column('#4', stretch=tk.NO)
-		self.memory_areas_list.column('#5', stretch=tk.YES)
+		self.memory_areas_list.column('#5', stretch=tk.YES, minwidth=10000)
 		self.memory_areas_list.tag_configure('monospace', font='courier')
 		self.memory_areas_list.grid(row=3, column=0, sticky=W+E+N+S)
-		ysb.grid(row=3, column=1, sticky=NS)
+		ysb.grid(row=0, column=1, sticky=NS)
 		xsb.grid(row=4, column=0, sticky=EW)
 
 		self.quit = tk.Button(self, text="Wyjście", command=root.destroy)
@@ -94,15 +99,14 @@ class Application(tk.Frame):
 		self.status_label = tk.Label(self, textvariable = self.status)
 		self.status_label.grid(row=6, column=0, sticky=W+E+N+S)
 
-
 	def dir_select_command(self):
 		tmp_dir = tk.filedialog.askdirectory()
 		print(tmp_dir)
 		self.dir_path.insert(0, tmp_dir)
 
 	def dir_process_command(self):
-		lines, global_constants, global_type_structs = self.get_lines(self.dir_path.get())
-		memory_areas = self.process_lines(lines, global_constants, global_type_structs)
+		lines = self.get_lines(self.dir_path.get())
+		memory_areas = self.process_lines(lines)
 		self.memory_areas_list.delete(*self.memory_areas_list.get_children())
 		for area in memory_areas:
 			area_description = str(area.offset) + "	" + area.var_name + "	" + area.type_name + "	" + area.buffer
@@ -111,8 +115,6 @@ class Application(tk.Frame):
 	def get_lines(self,rootdir):
 		self.status.set("wczytuje pliki")
 		lines = []
-		global_constants = {}
-		global_type_structs = {}
 		for root, subfolders, files in os.walk(rootdir):
 			for path in files:
 				print(path)
@@ -135,25 +137,15 @@ class Application(tk.Frame):
 										global_constant_name = type_split[0].split()[-1].strip()
 										global_constant_value = operator_split[1].strip()
 										if not global_constant_name.isdigit() and global_constant_value.isdigit():
-											global_constants[global_constant_name] = global_constant_value
-											print("CONSTANT " + global_constant_name + " := " + global_constant_value)
+											self.global_constants[global_constant_name] = global_constant_value
+											print("--- CONSTANT " + global_constant_name + " := " + global_constant_value)
 
 						type_struct_blocks = self.get_text_blocks(file_content,"TYPE","END_TYPE")
 						for type_struct_block in type_struct_blocks:
-							type_struct_block = type_struct_block.strip().lstrip("TYPE").rstrip("END_TYPE").strip()
 							if "STRUCT" in type_struct_block:
-								type_struct_size = 0
-								struct_split = type_struct_block.split("STRUCT")
-								type_struct_name = struct_split[0].strip().rstrip(":").strip()
-								field_split = struct_split[1].split(";")
-								for field in field_split:
-									if ":" in field:
-										field_type_split = field.split(":")
-										field_type = field_type_split[1].strip()
-										if field_type in type_sizes:
-											type_struct_size = type_struct_size + type_sizes[field_type]
-								global_type_structs[type_struct_name] = type_struct_size
-								print("TYPE " + type_struct_name + " := " + str(type_struct_size))
+								type_struct_name, type_struct_size = self.get_type_struct_info(type_struct_block)
+								self.type_sizes[type_struct_name] = type_struct_size
+								print("--- TYPE " + type_struct_name + " := " + str(type_struct_size))
 
 						file_content = file_content.split(";")
 						for line in file_content:
@@ -161,7 +153,7 @@ class Application(tk.Frame):
 								lines.append(line)
 
 		self.status.set("")
-		return lines, global_constants, global_type_structs
+		return lines
 
 	def get_text_blocks(self, file_content, block_start, block_end):
 		blocks = []
@@ -176,7 +168,21 @@ class Application(tk.Frame):
 			block_end_index = file_content.find(block_end, block_end_index)
 		return blocks
 
-	def process_lines(self, lines, global_constants, global_type_structs):
+	def get_type_struct_info(self, type_struct_block):
+		type_struct_block = type_struct_block.strip().lstrip("TYPE").rstrip("END_TYPE").strip()
+		type_struct_size = 0
+		struct_split = type_struct_block.split("STRUCT")
+		type_struct_name = struct_split[0].strip().rstrip(":").strip()
+		field_split = struct_split[1].split(";")
+		for field in field_split:
+			if ":" in field:
+				field_type_split = field.split(":")
+				field_type = field_type_split[1].strip()
+				field_size = self.get_size(field_type)
+				type_struct_size = type_struct_size + field_size
+		return type_struct_name, type_struct_size
+
+	def process_lines(self, lines):
 		self.status.set("przetwarzam pliki")	
 		memory_areas = []
 		for line in lines:
@@ -184,7 +190,7 @@ class Application(tk.Frame):
 			memory_areas.append(memory_area)
 
 		for area in memory_areas:
-			area.size = self.get_size(area.type_name, global_constants)
+			area.size = self.get_size(area.type_name)
 
 		memory_areas.sort()
 		self.status.set("")
@@ -212,26 +218,28 @@ class Application(tk.Frame):
 
 		return tmp_area
 
-	def get_size(self, type_name, global_constants):
+	def get_size(self, type_name):
 		if type_name.startswith("POINTER"):
-			return type_sizes["POINTER"]
+			return self.type_sizes["POINTER"]
 		elif type_name.startswith("ARRAY"):
-			return self.get_array_size(type_name, global_constants)
-		elif type_name in type_sizes:
-			return type_sizes[type_name]
+			return self.get_array_size(type_name)
+		elif type_name.startswith("STRING"):
+			return self.get_string_size(type_name)
+		elif type_name in self.type_sizes:
+			return self.type_sizes[type_name]
 		else:
 			return 0
 
-	def get_array_size(self, type_name, global_constants):
+	def get_array_size(self, type_name):
 		array_type_and_range = type_name.split("OF")
 		array_indexes = array_type_and_range[0].split(",")
 		array_total_size = 1
 		for array_index in array_indexes:
 			array_ranges = array_index.strip().lstrip("ARRAY").strip().lstrip("[").rstrip("]").split("..")
-			if array_ranges[0] in global_constants:
-				array_ranges[0] = global_constants[array_ranges[0]]
-			if array_ranges[1] in global_constants:
-				array_ranges[1] = global_constants[array_ranges[1]]
+			if array_ranges[0] in self.global_constants:
+				array_ranges[0] = self.global_constants[array_ranges[0]]
+			if array_ranges[1] in self.global_constants:
+				array_ranges[1] = self.global_constants[array_ranges[1]]
 			range1_ok = array_ranges[0].isdigit()
 			range2_ok = array_ranges[1].isdigit()
 			if range1_ok and range2_ok:
@@ -240,10 +248,17 @@ class Application(tk.Frame):
 				array_size = array_end - array_start + 1
 				array_total_size = array_total_size * array_size
 		array_type = array_type_and_range[1].strip()
-		array_type_size = 1
-		if array_type in type_sizes:
-			array_type_size = type_sizes[array_type]
+		array_type_size = self.get_size(array_type)
 		return array_total_size * array_type_size
+
+	def get_string_size(self, type_name):
+		if "(" in type_name:
+			size_str = type_name.lstrip("STRING(").rstrip(")")
+			if size_str.isdigit():
+				return int(size_str) + 1
+			elif size_str in global_constants:
+				return global_constants[size_str] + 1
+		return 80 + 1
 
 	def get_map(self,offset,size):
 		memmap = ""
