@@ -2,8 +2,15 @@ import os
 import sys
 from cx_Freeze import setup, Executable
 
+#usage : python setup.py build
+
 # Dependencies are automatically detected, but it might need fine tuning.
-base_path = r"C:\Users\Dela\AppData\Local\Programs\Python\Python36-32"
+base_path = "" # example is C:\Users\Dela\AppData\Local\Programs\Python\Python36-32
+working_directory = os.getcwd()
+print(sys.path)
+for current_path in sys.path:
+    if (len(current_path) < len(base_path) or base_path == "") and len(current_path) > 0 and current_path != working_directory and "Python" in current_path:
+        base_path = current_path
 os.environ['TCL_LIBRARY'] = base_path + r"\tcl\tcl8.6"
 os.environ['TK_LIBRARY'] = base_path + r"\tcl\tk8.6"
 include_files = [base_path + r"\DLLs\tcl86t.dll", \
