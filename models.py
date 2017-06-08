@@ -97,7 +97,7 @@ class TwinCatScanner:
                         global_constant_value = operator_split[1].strip()
                         if not global_constant_name.isdigit() and global_constant_value.isdigit():
                             self.global_constants[global_constant_name] = int(global_constant_value)
-                            print("--- CONSTANT {} := {}".format(global_constant_name, str(global_constant_value)))
+                            print("--- CONSTANT %s := %s" % (global_constant_name, global_constant_value))
 
     def scan_type_structs(self, file_content):
         type_struct_blocks = self.get_text_blocks(file_content, "TYPE", "END_TYPE")
@@ -105,7 +105,7 @@ class TwinCatScanner:
             if "STRUCT" in type_struct_block:
                 type_struct_name, type_struct_size = self.get_type_struct_info(type_struct_block)
                 self.type_sizes[type_struct_name] = type_struct_size
-                print("--- TYPE " + type_struct_name + " := " + str(type_struct_size))
+                print("--- TYPE %s := %d" % (type_struct_name, type_struct_size))
 
     def get_text_blocks(self, content, start, end):
         blocks = []
@@ -181,21 +181,19 @@ class TwinCatScanner:
             return 0
 
     def get_array_size(self, type_name):
-        array_type_and_range = type_name.split("OF")
-        array_indexes = array_type_and_range[0].split(",")
+        array_type_and_range = type_name.strip().lstrip("ARRAY").split("OF", 1)
+        array_indexes = array_type_and_range[0].strip().lstrip("[").rstrip("]").split(",")
         array_total_size = 1
         for array_index in array_indexes:
-            array_ranges = array_index.strip().lstrip("ARRAY").strip().lstrip("[").rstrip("]").split("..")
-            if array_ranges[0] in self.global_constants:
-                array_ranges[0] = self.global_constants[array_ranges[0]]
-            if array_ranges[1] in self.global_constants:
-                array_ranges[1] = self.global_constants[array_ranges[1]]
-            range1_ok = array_ranges[0].isdigit()
-            range2_ok = array_ranges[1].isdigit()
-            if range1_ok and range2_ok:
-                array_start = int(array_ranges[0])
-                array_end = int(array_ranges[1])
-                array_size = array_end - array_start + 1
+            array_ranges = array_index.split("..")
+            if len(array_ranges) == 2:
+                array_limit = [0, 0]
+                for i in range(2):
+                    if array_ranges[i] in self.global_constants:
+                        array_limit[i] = self.global_constants[array_ranges[i]]
+                    elif array_ranges[i].isdigit():
+                        array_limit[i] = int(array_ranges[i])
+                array_size = abs(array_limit[1] - array_limit[0]) + 1
                 array_total_size = array_total_size * array_size
         array_type = array_type_and_range[1].strip()
         array_type_size = self.get_size(array_type)
