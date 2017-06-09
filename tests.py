@@ -81,7 +81,7 @@ class TwinCatScannerTests(unittest.TestCase):
         self.assertEqual("ST2", name2)
         self.assertEqual(4, size2)
 
-    def process_lines(self, lines):
+    def test_process_lines(self):
         lines = self.scanner.process_content(self.content)
         areas = self.scanner.process_lines(lines)
 
@@ -93,7 +93,7 @@ class TwinCatScannerTests(unittest.TestCase):
         self.compare(areas[5], "Variable6", 164, "POINTER TO BYTE", self.var[6], 4)
         self.compare(areas[6], "Variable7", 168, "STRING(9)", self.var[7], 10)
         self.compare(areas[7], "Variable8", 178, "STRING", self.var[8], 81)
-        self.compare(areas[8], "Variable9", 300, "STRING", self.var[9], 256)
+        self.compare(areas[8], "Variable9", 300, "STRING(MAX_STRING_LENGTH)", self.var[9], 256)
 
     def test_process_memory(self):
         line1 = "Variable1 AT%MB101 : Type1;"

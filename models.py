@@ -86,7 +86,7 @@ class TwinCatScanner:
     def scan_global_constants(self, file_content):
         constant_blocks = self.get_text_blocks(file_content, "VAR_GLOBAL CONSTANT", "END_VAR")
         for constant_block in constant_blocks:
-            constants = constant_block.strip().lstrip("VAR_GLOBAL CONSTANT").rstrip("END_VAR")
+            constants = self.strip_block(constant_block, "VAR_GLOBAL CONSTANT", "END_VAR")
             constants = constants.split(";")
             for constant in constants:
                 if ":=" in constant:
@@ -119,7 +119,7 @@ class TwinCatScanner:
         return blocks
 
     def get_type_struct_info(self, type_struct_block):
-        type_struct_block = type_struct_block.strip().lstrip("TYPE").rstrip("END_TYPE").strip()
+        type_struct_block = self.strip_block(type_struct_block, "TYPE", "END_TYPE")
         type_struct_size = 0
         struct_split = type_struct_block.split("STRUCT")
         type_struct_name = struct_split[0].strip().rstrip(":").strip()
@@ -148,7 +148,7 @@ class TwinCatScanner:
 
     def process_memory(self, line):
         area = TwinCatMemoryArea()
-        area.buffer = line
+        area.buffer = line.strip()
 
         name_split = line.split("%MB")
         if len(name_split) == 2:
@@ -182,7 +182,7 @@ class TwinCatScanner:
 
     def get_array_size(self, type_name):
         array_type_and_range = type_name.strip().lstrip("ARRAY").split("OF", 1)
-        array_indexes = array_type_and_range[0].strip().lstrip("[").rstrip("]").split(",")
+        array_indexes = self.strip_block(array_type_and_range[0], "[", "]").split(",")
         array_total_size = 1
         for array_index in array_indexes:
             array_ranges = array_index.split("..")
@@ -201,7 +201,7 @@ class TwinCatScanner:
 
     def get_string_size(self, type_name):
         if "(" in type_name:
-            size_str = type_name.lstrip("STRING(").rstrip(")")
+            size_str = self.strip_block(type_name, "STRING(", ")")
             if size_str.isdigit():
                 return int(size_str) + 1
             elif size_str in self.global_constants:
@@ -215,3 +215,6 @@ class TwinCatScanner:
         for _ in range(size):
             memmap = memmap + "#"
         return memmap
+
+    def strip_block(self, block, start, end):
+        return block.strip().lstrip(start).rstrip(end).strip()

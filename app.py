@@ -34,7 +34,14 @@ class Application(tk.Frame):
         self.dir_process["command"] = self.dir_process_command
         self.dir_process.grid(row=2, column=0, sticky=W+E+N+S)
 
-        self.memory_areas_list = ttk.Treeview(self, columns=("name","offset","size","type", "buffer", "map"))
+        self.main_area = ttk.Notebook(self)
+        self.main_area.grid(row=3, column=0, sticky=W+E+N+S)
+
+        main_tab = Frame(self.main_area)
+        main_tab.pack(expand=True, fill=BOTH)
+        self.main_area.add(main_tab, text="Zmienne")
+
+        self.memory_areas_list = ttk.Treeview(main_tab, columns=("name", "offset", "size", "type", "map"))
         ysb = ttk.Scrollbar(orient=VERTICAL, command=self.memory_areas_list.yview)
         xsb = ttk.Scrollbar(orient=HORIZONTAL, command=self.memory_areas_list.xview)
         self.memory_areas_list['yscroll'] = ysb.set
@@ -44,24 +51,41 @@ class Application(tk.Frame):
         self.memory_areas_list.heading('#1', text='offset')
         self.memory_areas_list.heading('#2', text='size')
         self.memory_areas_list.heading('#3', text='type')
-        self.memory_areas_list.heading('#4', text='buffer')
-        self.memory_areas_list.heading('#5', text='map')
+        self.memory_areas_list.heading('#4', text='map')
         self.memory_areas_list.column('#0', stretch=tk.NO)
-        self.memory_areas_list.column('#1', stretch=tk.NO)
-        self.memory_areas_list.column('#2', stretch=tk.NO)
-        self.memory_areas_list.column('#3', stretch=tk.NO)
-        self.memory_areas_list.column('#4', stretch=tk.NO)
-        self.memory_areas_list.column('#5', stretch=tk.YES, minwidth=10000)
-        self.memory_areas_list.tag_configure('monospace', font='courier')
-        self.memory_areas_list.grid(row=3, column=0, sticky=W+E+N+S)
+        self.memory_areas_list.column('#1', stretch=tk.NO, anchor=tk.CENTER)
+        self.memory_areas_list.column('#2', stretch=tk.NO, anchor=tk.CENTER)
+        self.memory_areas_list.column('#3', stretch=tk.NO, anchor=tk.CENTER)
+        self.memory_areas_list.column('#4', stretch=tk.YES, minwidth=10000)
+        self.memory_areas_list.tag_configure('monospace', font=('courier', 10))
+        self.memory_areas_list.pack(expand=True, fill=BOTH)
         ysb.grid(row=0, column=1, sticky=NS)
         xsb.grid(row=4, column=0, sticky=EW)
+
+        const_tab = Frame(self.main_area)
+        const_tab.pack(expand=True, fill=BOTH)
+        self.main_area.add(const_tab, text="Stałe")
+
+        self.const_list = ttk.Treeview(const_tab, columns=("name", "value"))
+        const_ysb = ttk.Scrollbar(orient=VERTICAL, command=self.const_list.yview)
+        const_xsb = ttk.Scrollbar(orient=HORIZONTAL, command=self.const_list.xview)
+        self.const_list['yscroll'] = const_ysb.set
+        self.const_list['xscroll'] = const_xsb.set
+
+        self.const_list.heading('#0', text='name')
+        self.const_list.heading('#1', text='value')
+        self.const_list.column('#0', stretch=tk.NO)
+        self.const_list.column('#1', stretch=tk.NO, anchor=tk.CENTER)
+        self.const_list.tag_configure('monospace', font=('courier', 10))
+        self.const_list.pack(expand=True, fill=BOTH)
+        const_ysb.grid(row=0, column=1, sticky=NS)
+        const_xsb.grid(row=4, column=0, sticky=EW)
 
         self.quit = tk.Button(self, text="Wyjście", command=root.destroy)
         self.quit.grid(row=5, column=0, sticky=W+E+N+S)
 
         self.status = StringVar()
-        self.status_label = tk.Label(self, textvariable = self.status)
+        self.status_label = tk.Label(self, textvariable=self.status)
         self.status_label.grid(row=6, column=0, sticky=W+E+N+S)
 
     def dir_select_command(self):
@@ -75,7 +99,10 @@ class Application(tk.Frame):
         memory_areas = self.scanner.process_lines(lines)
         self.memory_areas_list.delete(*self.memory_areas_list.get_children())
         for area in memory_areas:
-            self.memory_areas_list.insert('', 'end', text=area.var_name, values=[str(area.offset), area.size, area.type_name, area.buffer, self.scanner.get_map(area.offset, area.size)], tag='monospace')
+            self.memory_areas_list.insert('', 'end', text=area.var_name, values=[str(area.offset), area.size, area.type_name, self.scanner.get_map(area.offset, area.size)], tag='monospace')
+        self.const_list.delete(*self.const_list.get_children())
+        for const_name in self.scanner.global_constants:
+            self.const_list.insert('', 'end', text=const_name, values=[str(self.scanner.global_constants[const_name])], tag='monospace')
 
     def app_notify(self, notification):
         self.status.set(notification)

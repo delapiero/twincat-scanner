@@ -15,8 +15,9 @@ os.environ['TCL_LIBRARY'] = base_path + r"\tcl\tcl8.6"
 os.environ['TK_LIBRARY'] = base_path + r"\tcl\tk8.6"
 include_files = [base_path + r"\DLLs\tcl86t.dll", \
                  base_path + r"\DLLs\tk86t.dll"]
-include_packages = ["os","sys"]
-build_exe_options = {"packages": include_packages, "include_files": include_files}
+include_packages = ["os", "sys"]
+exclude_packages = ["email", "http", "logging", "pydoc_data", "unittest", "urllib", "xml"]
+build_exe_options = {"packages": include_packages, "include_files": include_files, "excludes": exclude_packages}
 
 # GUI applications require a different base on Windows (the default is for a
 # console application).
