@@ -1,45 +1,55 @@
 import os
 
 class TwinCatMemoryArea:
-    var_name = ""
-    offset = 0
-    type_name = ""
-    size = 1
-    buffer = ""
+
+    def __init__(self):
+        self.var_name = ""
+        self.offset = 0
+        self.type_name = ""
+        self.size = 1
+        self.buffer = ""
 
     def __lt__(self, other):
         return self.offset < other.offset
+
+class TwinCatType:
+
+    def __init__(self, size=1):
+        self.size = size
+        self.fields = {}
 
 class TwinCatScanner:
 
     def __init__(self):
         self.type_sizes = {
-            "BOOL" : 1,
-            "BYTE" : 1,
-            "WORD" : 2,
-            "DWORD" : 4,
-            "SINT" : 1,
-            "INT" : 2,
-            "DINT" : 4,
-            "LINT" : 8,
-            "USINT" : 1,
-            "UINT" : 2,
-            "UDINT" : 4,
-            "ULINT" : 8,
-            "REAL" : 4,
-            "LREAL" : 8,
-            "TIME" : 4,
-            "TIME_OF_DAY" : 4,
-            "TOD" : 4,
-            "DATE" : 4,
-            "DATE_AND_TIME" : 4,
-            "DT" : 4,
-            "POINTER" : 4,
+            "BOOL" : TwinCatType(1),
+            "BYTE" : TwinCatType(1),
+            "WORD" : TwinCatType(2),
+            "DWORD" : TwinCatType(4),
+            "SINT" : TwinCatType(1),
+            "INT" : TwinCatType(2),
+            "DINT" : TwinCatType(4),
+            "LINT" : TwinCatType(8),
+            "USINT" : TwinCatType(1),
+            "UINT" : TwinCatType(2),
+            "UDINT" : TwinCatType(4),
+            "ULINT" : TwinCatType(8),
+            "REAL" : TwinCatType(4),
+            "LREAL" : TwinCatType(8),
+            "TIME" : TwinCatType(4),
+            "TIME_OF_DAY" : TwinCatType(4),
+            "TOD" : TwinCatType(4),
+            "DATE" : TwinCatType(4),
+            "DATE_AND_TIME" : TwinCatType(4),
+            "DT" : TwinCatType(4),
+            "POINTER" : TwinCatType(4),
         }
 
         self.global_constants = {
             "MAX_STRING_LENGTH" : 255
         }
+
+        self.memory_map = {}
 
     def notify(self, status):
         """Replace to get status """
@@ -103,9 +113,7 @@ class TwinCatScanner:
         type_struct_blocks = self.get_text_blocks(file_content, "TYPE", "END_TYPE")
         for type_struct_block in type_struct_blocks:
             if "STRUCT" in type_struct_block:
-                type_struct_name, type_struct_size = self.get_type_struct_info(type_struct_block)
-                self.type_sizes[type_struct_name] = type_struct_size
-                print("--- TYPE %s := %d" % (type_struct_name, type_struct_size))
+                self.scan_type_struct(type_struct_block)
 
     def get_text_blocks(self, content, start, end):
         blocks = []
@@ -118,19 +126,23 @@ class TwinCatScanner:
             end_index = content.find(end, start_index + len(start))
         return blocks
 
-    def get_type_struct_info(self, type_struct_block):
+    def scan_type_struct(self, type_struct_block):
         type_struct_block = self.strip_block(type_struct_block, "TYPE", "END_TYPE")
         type_struct_size = 0
         struct_split = type_struct_block.split("STRUCT")
         type_struct_name = struct_split[0].strip().rstrip(":").strip()
+        self.type_sizes[type_struct_name] = TwinCatType(type_struct_size)
         field_split = struct_split[1].split(";")
         for field in field_split:
             if ":" in field:
                 field_type_split = field.split(":")
+                field_name = field_type_split[0].split()[-1]
                 field_type = field_type_split[1].strip()
+                self.type_sizes[type_struct_name].fields[field_name] = field_type
                 field_size = self.get_size(field_type)
                 type_struct_size = type_struct_size + field_size
-        return type_struct_name, type_struct_size
+        self.type_sizes[type_struct_name].size = type_struct_size
+        print("--- TYPE %s := %d" % (type_struct_name, type_struct_size))
 
     def process_lines(self, lines):
         self.notify("przetwarzam pliki")
@@ -138,11 +150,16 @@ class TwinCatScanner:
         for line in lines:
             memory_area = self.process_memory(line)
             memory_areas.append(memory_area)
+        memory_areas.sort()
 
         for area in memory_areas:
             area.size = self.get_size(area.type_name)
+            for current_adr in range(area.offset, area.offset + area.size):
+                if current_adr not in self.memory_map:
+                    self.memory_map[current_adr] = area.var_name
+                else:
+                    self.memory_map[current_adr] = "{}, {}".format(self.memory_map[current_adr], area.var_name)
 
-        memory_areas.sort()
         self.notify("")
         return memory_areas
 
@@ -170,13 +187,13 @@ class TwinCatScanner:
 
     def get_size(self, type_name):
         if type_name.startswith("POINTER"):
-            return self.type_sizes["POINTER"]
+            return self.type_sizes["POINTER"].size
         elif type_name.startswith("ARRAY"):
             return self.get_array_size(type_name)
         elif type_name.startswith("STRING"):
             return self.get_string_size(type_name)
         elif type_name in self.type_sizes:
-            return self.type_sizes[type_name]
+            return self.type_sizes[type_name].size
         else:
             return 0
 

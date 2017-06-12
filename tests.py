@@ -48,8 +48,8 @@ class TwinCatScannerTests(unittest.TestCase):
         lines = self.scanner.process_content(self.content)
         self.assertEqual(1, self.scanner.global_constants["Const1"])
         self.assertEqual(5, self.scanner.global_constants["Const2"])
-        self.assertEqual(2, self.scanner.type_sizes["ST1"])
-        self.assertEqual(4, self.scanner.type_sizes["ST2"])
+        self.assertEqual(2, self.scanner.type_sizes["ST1"].size)
+        self.assertEqual(4, self.scanner.type_sizes["ST2"].size)
         self.assertEqual(9, len(lines))
 
     def test_remove_comments(self):
@@ -64,22 +64,24 @@ class TwinCatScannerTests(unittest.TestCase):
 
     def test_scan_type_structs(self):
         self.scanner.scan_type_structs(self.types)
-        self.assertEqual(2, self.scanner.type_sizes["ST1"])
-        self.assertEqual(4, self.scanner.type_sizes["ST2"])
+        self.assertEqual(2, self.scanner.type_sizes["ST1"].size)
+        self.assertEqual(4, self.scanner.type_sizes["ST2"].size)
 
     def test_get_text_blocks(self):
         blocks = self.scanner.get_text_blocks(self.types, "TYPE", "END_TYPE")
         self.assertEqual(self.type1.strip(), blocks[0])
         self.assertEqual(self.type2.strip(), blocks[1])
 
-    def test_get_type_struct_info(self):
-        name1, size1 = self.scanner.get_type_struct_info(self.type1)
-        self.assertEqual("ST1", name1)
-        self.assertEqual(2, size1)
+    def test_scan_type_struct(self):
+        self.scanner.scan_type_struct(self.type1)
+        self.assertEqual(2, self.scanner.type_sizes["ST1"].size)
+        self.assertEqual("BOOL", self.scanner.type_sizes["ST1"].fields["Field1"])
+        self.assertEqual("BOOL", self.scanner.type_sizes["ST1"].fields["Field2"])
 
-        name2, size2 = self.scanner.get_type_struct_info(self.type2)
-        self.assertEqual("ST2", name2)
-        self.assertEqual(4, size2)
+        self.scanner.scan_type_struct(self.type2)
+        self.assertEqual(4, self.scanner.type_sizes["ST2"].size)
+        self.assertEqual("UINT", self.scanner.type_sizes["ST2"].fields["Field3"])
+        self.assertEqual("UINT", self.scanner.type_sizes["ST2"].fields["Field4"])
 
     def test_process_lines(self):
         lines = self.scanner.process_content(self.content)

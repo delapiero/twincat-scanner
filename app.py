@@ -81,6 +81,44 @@ class Application(tk.Frame):
         const_ysb.grid(row=0, column=1, sticky=NS)
         const_xsb.grid(row=4, column=0, sticky=EW)
 
+        types_tab = Frame(self.main_area)
+        types_tab.pack(expand=True, fill=BOTH)
+        self.main_area.add(types_tab, text="Typy")
+
+        self.types_list = ttk.Treeview(types_tab, columns=("name", "size"))
+        types_ysb = ttk.Scrollbar(orient=VERTICAL, command=self.types_list.yview)
+        types_xsb = ttk.Scrollbar(orient=HORIZONTAL, command=self.types_list.xview)
+        self.types_list['yscroll'] = types_ysb.set
+        self.types_list['xscroll'] = types_xsb.set
+
+        self.types_list.heading('#0', text='name')
+        self.types_list.heading('#1', text='size')
+        self.types_list.column('#0', stretch=tk.NO)
+        self.types_list.column('#1', stretch=tk.NO, anchor=tk.CENTER)
+        self.types_list.tag_configure('monospace', font=('courier', 10))
+        self.types_list.pack(expand=True, fill=BOTH)
+        types_ysb.grid(row=0, column=1, sticky=NS)
+        types_xsb.grid(row=4, column=0, sticky=EW)
+
+        mem_tab = Frame(self.main_area)
+        mem_tab.pack(expand=True, fill=BOTH)
+        self.main_area.add(mem_tab, text="Pamięć")
+
+        self.mem_list = ttk.Treeview(mem_tab, columns=("adr", "variables"))
+        mem_ysb = ttk.Scrollbar(orient=VERTICAL, command=self.mem_list.yview)
+        mem_xsb = ttk.Scrollbar(orient=HORIZONTAL, command=self.mem_list.xview)
+        self.mem_list['yscroll'] = mem_ysb.set
+        self.mem_list['xscroll'] = mem_xsb.set
+
+        self.mem_list.heading('#0', text='adr')
+        self.mem_list.heading('#1', text='variables')
+        self.mem_list.column('#0', stretch=tk.NO, anchor=tk.CENTER)
+        self.mem_list.column('#1', stretch=tk.NO)
+        self.mem_list.tag_configure('monospace', font=('courier', 10))
+        self.mem_list.pack(expand=True, fill=BOTH)
+        mem_ysb.grid(row=0, column=1, sticky=NS)
+        mem_xsb.grid(row=4, column=0, sticky=EW)
+
         self.quit = tk.Button(self, text="Wyjście", command=root.destroy)
         self.quit.grid(row=5, column=0, sticky=W+E+N+S)
 
@@ -99,10 +137,23 @@ class Application(tk.Frame):
         memory_areas = self.scanner.process_lines(lines)
         self.memory_areas_list.delete(*self.memory_areas_list.get_children())
         for area in memory_areas:
-            self.memory_areas_list.insert('', 'end', text=area.var_name, values=[str(area.offset), area.size, area.type_name, self.scanner.get_map(area.offset, area.size)], tag='monospace')
+            area_values = [str(area.offset), area.size, area.type_name, self.scanner.get_map(area.offset, area.size)]
+            self.memory_areas_list.insert('', 'end', area.var_name, text=area.var_name, values=area_values, tag='monospace')
         self.const_list.delete(*self.const_list.get_children())
         for const_name in self.scanner.global_constants:
-            self.const_list.insert('', 'end', text=const_name, values=[str(self.scanner.global_constants[const_name])], tag='monospace')
+            const_values = [str(self.scanner.global_constants[const_name])]
+            self.const_list.insert('', 'end', const_name, text=const_name, values=const_values, tag='monospace')
+        self.types_list.delete(*self.types_list.get_children())
+        for type_size in self.scanner.type_sizes:
+            type_values = [str(self.scanner.type_sizes[type_size].size)]
+            self.types_list.insert('', 'end', type_size, text=type_size, values=type_values, tag='monospace')
+            for field in self.scanner.type_sizes[type_size].fields:
+                field_values = [str(self.scanner.type_sizes[type_size].fields[field])]
+                self.types_list.insert(type_size, 'end', text=field, values=field_values, tag='monospace')
+        self.mem_list.delete(*self.mem_list.get_children())
+        for mem in self.scanner.memory_map:
+            mem_values = [str(self.scanner.memory_map[mem])]
+            self.mem_list.insert('', 'end', mem, text=mem, values=mem_values, tag='monospace')
 
     def app_notify(self, notification):
         self.status.set(notification)
