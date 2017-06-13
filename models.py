@@ -9,9 +9,6 @@ class TwinCatMemoryArea:
         self.size = 1
         self.buffer = ""
 
-    def __lt__(self, other):
-        return self.offset < other.offset
-
 class TwinCatType:
 
     def __init__(self, size=1):
@@ -66,7 +63,7 @@ class TwinCatScanner:
             for path in files:
                 print(path)
                 if not path.upper().endswith("BAK"):
-                    with open(os.path.join(root, path), 'r', errors='surrogateescape') as file:
+                    with open(os.path.join(root, path), 'r', errors='replace') as file:
                         file_content = file.read()
                         file_lines = self.process_content(file_content)
                         lines += file_lines
@@ -112,7 +109,7 @@ class TwinCatScanner:
     def scan_type_structs(self, file_content):
         type_struct_blocks = self.get_text_blocks(file_content, "TYPE", "END_TYPE")
         for type_struct_block in type_struct_blocks:
-            if "STRUCT" in type_struct_block:
+            if "STRUCT" in type_struct_block and "END_STRUCT" in type_struct_block:
                 self.scan_type_struct(type_struct_block)
 
     def get_text_blocks(self, content, start, end):
@@ -150,7 +147,8 @@ class TwinCatScanner:
         for line in lines:
             memory_area = self.process_memory(line)
             memory_areas.append(memory_area)
-        memory_areas.sort()
+        memory_areas.sort(key=lambda area: area.var_name.lower())
+        memory_areas.sort(key=lambda area: area.offset)
 
         for area in memory_areas:
             area.size = self.get_size(area.type_name)
