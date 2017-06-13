@@ -9,6 +9,14 @@ class TwinCatMemoryArea:
         self.size = 1
         self.buffer = ""
 
+    def map(self):
+        memmap = ""
+        for _ in range(self.offset):
+            memmap = memmap + " "
+        for _ in range(self.size):
+            memmap = memmap + "#"
+        return memmap
+
 class TwinCatType:
 
     def __init__(self, size=1):
@@ -18,6 +26,11 @@ class TwinCatType:
 class TwinCatScanner:
 
     def __init__(self):
+        self.clear()
+
+    def clear(self):
+        self.memory_areas = []
+
         self.type_sizes = {
             "BOOL" : TwinCatType(1),
             "BYTE" : TwinCatType(1),
@@ -52,11 +65,12 @@ class TwinCatScanner:
         """Replace to get status """
         print(status)
 
-    def get_memory_areas(self, rootdir):
-        lines = self.get_lines(rootdir)
-        return self.process_lines(lines)
+    def run(self, rootdir):
+        self.clear()
+        lines = self.scan_dir(rootdir)
+        self.memory_areas = self.scan_lines(lines)
 
-    def get_lines(self,rootdir):
+    def scan_dir(self, rootdir):
         self.notify("wczytuje pliki")
         lines = []
         for root, _, files in os.walk(rootdir):
@@ -65,12 +79,12 @@ class TwinCatScanner:
                 if not path.upper().endswith("BAK"):
                     with open(os.path.join(root, path), 'r', errors='replace') as file:
                         file_content = file.read()
-                        file_lines = self.process_content(file_content)
+                        file_lines = self.scan_file(file_content)
                         lines += file_lines
         self.notify("")
         return lines
 
-    def process_content(self, file_content):
+    def scan_file(self, file_content):
         lines = []
 
         file_content = self.remove_comments(file_content)
@@ -112,17 +126,6 @@ class TwinCatScanner:
             if "STRUCT" in type_struct_block and "END_STRUCT" in type_struct_block:
                 self.scan_type_struct(type_struct_block)
 
-    def get_text_blocks(self, content, start, end):
-        blocks = []
-        start_index = content.find(start)
-        end_index = content.find(end, start_index + len(start))
-        while start_index > -1 and end_index > -1 and start_index < end_index:
-            block = content[start_index:end_index + len(end)]
-            blocks.append(block)
-            start_index = content.find(start, end_index + len(end))
-            end_index = content.find(end, start_index + len(start))
-        return blocks
-
     def scan_type_struct(self, type_struct_block):
         type_struct_block = self.strip_block(type_struct_block, "TYPE", "END_TYPE")
         type_struct_size = 0
@@ -141,11 +144,25 @@ class TwinCatScanner:
         self.type_sizes[type_struct_name].size = type_struct_size
         print("--- TYPE %s := %d" % (type_struct_name, type_struct_size))
 
-    def process_lines(self, lines):
+    def get_text_blocks(self, content, start, end):
+        blocks = []
+        start_index = content.find(start)
+        end_index = content.find(end, start_index + len(start))
+        while start_index > -1 and end_index > -1 and start_index < end_index:
+            block = content[start_index:end_index + len(end)]
+            blocks.append(block)
+            start_index = content.find(start, end_index + len(end))
+            end_index = content.find(end, start_index + len(start))
+        return blocks
+
+    def strip_block(self, block, start, end):
+        return block.strip().lstrip(start).rstrip(end).strip()
+
+    def scan_lines(self, lines):
         self.notify("przetwarzam pliki")
         memory_areas = []
         for line in lines:
-            memory_area = self.process_memory(line)
+            memory_area = self.scan_line(line)
             memory_areas.append(memory_area)
         memory_areas.sort(key=lambda area: area.var_name.lower())
         memory_areas.sort(key=lambda area: area.offset)
@@ -161,7 +178,7 @@ class TwinCatScanner:
         self.notify("")
         return memory_areas
 
-    def process_memory(self, line):
+    def scan_line(self, line):
         area = TwinCatMemoryArea()
         area.buffer = line.strip()
 
@@ -222,14 +239,3 @@ class TwinCatScanner:
             elif size_str in self.global_constants:
                 return self.global_constants[size_str] + 1
         return 80 + 1
-
-    def get_map(self, offset, size):
-        memmap = ""
-        for _ in range(offset):
-            memmap = memmap + " "
-        for _ in range(size):
-            memmap = memmap + "#"
-        return memmap
-
-    def strip_block(self, block, start, end):
-        return block.strip().lstrip(start).rstrip(end).strip()

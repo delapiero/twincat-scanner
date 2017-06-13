@@ -22,21 +22,21 @@ class Application(tk.Frame):
 
     def create_widgets(self):
 
-        self.dir_select = tk.Button(self)
+        self.dir_select = ttk.Button(self)
         self.dir_select["text"] = "Wybierz projekt"
         self.dir_select["command"] = self.dir_select_command
         self.dir_select.grid(row=0, column=0, sticky=NSEW)
 
         self.dir = StringVar()
-        self.dir_path = tk.Entry(self, textvariable=self.dir)
+        self.dir_path = ttk.Entry(self, textvariable=self.dir)
         self.dir_path.grid(row=1, column=0, sticky=NSEW)
 
-        self.dir_process = tk.Button(self)
+        self.dir_process = ttk.Button(self)
         self.dir_process["text"] = "Wczytaj projekt"
         self.dir_process["command"] = self.dir_process_command
         self.dir_process.grid(row=2, column=0, sticky=NSEW)
 
-        self.quit = tk.Button(self, text="Wyjście", command=root.destroy)
+        self.quit = ttk.Button(self, text="Wyjście", command=root.destroy)
         self.quit.grid(row=0, column=1, rowspan=3, sticky=NSEW)
 
         self.main_area = ttk.Notebook(self)
@@ -62,7 +62,7 @@ class Application(tk.Frame):
         self.mem_list.column('#1', stretch=tk.NO)
 
         self.status = StringVar()
-        self.status_label = tk.Label(self, textvariable=self.status)
+        self.status_label = ttk.Label(self, textvariable=self.status)
         self.status_label.grid(row=4, column=0, sticky=W+E+N+S)
 
     def create_tab(self, master, text, columns):
@@ -96,11 +96,10 @@ class Application(tk.Frame):
 
     def dir_process_command(self):
         path = self.dir_path.get()
-        lines = self.scanner.get_lines(path)
-        memory_areas = self.scanner.process_lines(lines)
+        self.scanner.run(path)
         self.memory_areas_list.delete(*self.memory_areas_list.get_children())
-        for area in memory_areas:
-            area_values = [str(area.offset), area.size, area.type_name, self.scanner.get_map(area.offset, area.size)]
+        for area in self.scanner.memory_areas:
+            area_values = [str(area.offset), area.size, area.type_name, area.map()]
             self.memory_areas_list.insert('', 'end', area.var_name, text=area.var_name, values=area_values, tag='monospace')
         self.const_list.delete(*self.const_list.get_children())
         for const_name in self.scanner.global_constants:

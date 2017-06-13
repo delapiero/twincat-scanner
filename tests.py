@@ -44,8 +44,8 @@ class TwinCatScannerTests(unittest.TestCase):
         for variable in self.var:
             self.content += self.var[variable] + ";\n"
 
-    def test_process_content(self):
-        lines = self.scanner.process_content(self.content)
+    def test_scan_file(self):
+        lines = self.scanner.scan_file(self.content)
         self.assertEqual(1, self.scanner.global_constants["Const1"])
         self.assertEqual(5, self.scanner.global_constants["Const2"])
         self.assertEqual(2, self.scanner.type_sizes["ST1"].size)
@@ -84,8 +84,8 @@ class TwinCatScannerTests(unittest.TestCase):
         self.assertEqual("UINT", self.scanner.type_sizes["ST2"].fields["Field4"])
 
     def test_process_lines(self):
-        lines = self.scanner.process_content(self.content)
-        areas = self.scanner.process_lines(lines)
+        lines = self.scanner.scan_file(self.content)
+        areas = self.scanner.scan_lines(lines)
 
         self.compare(areas[0], "Variable1", 100, "ST1", self.var[1], 2)
         self.compare(areas[1], "Variable2", 102, "ST2", self.var[2], 4)
@@ -97,16 +97,16 @@ class TwinCatScannerTests(unittest.TestCase):
         self.compare(areas[7], "Variable8", 178, "STRING", self.var[8], 81)
         self.compare(areas[8], "Variable9", 300, "STRING(MAX_STRING_LENGTH)", self.var[9], 256)
 
-    def test_process_memory(self):
+    def test_process_line(self):
         line1 = "Variable1 AT%MB101 : Type1;"
-        area1 = self.scanner.process_memory(line1)
+        area1 = self.scanner.scan_line(line1)
         self.assertEqual("Variable1", area1.var_name)
         self.assertEqual(101, area1.offset)
         self.assertEqual("Type1", area1.type_name)
         self.assertEqual(line1, area1.buffer)
 
         line2 = "Variable2 AT %MB102 : Type2;"
-        area2 = self.scanner.process_memory(line2)
+        area2 = self.scanner.scan_line(line2)
         self.assertEqual("Variable2", area2.var_name)
         self.assertEqual(102, area2.offset)
         self.assertEqual("Type2", area2.type_name)
@@ -137,7 +137,9 @@ class TwinCatScannerTests(unittest.TestCase):
         self.assertEqual(256, self.scanner.get_string_size("STRING(MAX_STRING_LENGTH)"))
 
     def test_get_map(self):
-        memmap = self.scanner.get_map(3, 2)
-        self.assertEqual("   ##", memmap)
+        area = models.TwinCatMemoryArea()
+        area.offset = 3
+        area.size = 2
+        self.assertEqual("   ##", area.map())
 
 unittest.main()
