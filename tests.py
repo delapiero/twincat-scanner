@@ -67,23 +67,7 @@ class TwinCatScannerTests(unittest.TestCase):
         self.assertEqual(2, self.scanner.type_sizes["ST1"].size)
         self.assertEqual(4, self.scanner.type_sizes["ST2"].size)
 
-    def test_get_text_blocks(self):
-        blocks = self.scanner.get_text_blocks(self.types, "TYPE", "END_TYPE")
-        self.assertEqual(self.type1.strip(), blocks[0])
-        self.assertEqual(self.type2.strip(), blocks[1])
-
-    def test_scan_type_struct(self):
-        self.scanner.scan_type_struct(self.type1)
-        self.assertEqual(2, self.scanner.type_sizes["ST1"].size)
-        self.assertEqual("BOOL", self.scanner.type_sizes["ST1"].fields["Field1"])
-        self.assertEqual("BOOL", self.scanner.type_sizes["ST1"].fields["Field2"])
-
-        self.scanner.scan_type_struct(self.type2)
-        self.assertEqual(4, self.scanner.type_sizes["ST2"].size)
-        self.assertEqual("UINT", self.scanner.type_sizes["ST2"].fields["Field3"])
-        self.assertEqual("UINT", self.scanner.type_sizes["ST2"].fields["Field4"])
-
-    def test_process_lines(self):
+    def test_scan_lines(self):
         lines = self.scanner.scan_file(self.content)
         areas = self.scanner.scan_lines(lines)
 
@@ -97,27 +81,11 @@ class TwinCatScannerTests(unittest.TestCase):
         self.compare(areas[7], "Variable8", 178, "STRING", self.var[8], 81)
         self.compare(areas[8], "Variable9", 300, "STRING(MAX_STRING_LENGTH)", self.var[9], 256)
 
-    def test_process_line(self):
-        line1 = "Variable1 AT%MB101 : Type1;"
-        area1 = self.scanner.scan_line(line1)
-        self.assertEqual("Variable1", area1.var_name)
-        self.assertEqual(101, area1.offset)
-        self.assertEqual("Type1", area1.type_name)
-        self.assertEqual(line1, area1.buffer)
-
-        line2 = "Variable2 AT %MB102 : Type2;"
-        area2 = self.scanner.scan_line(line2)
-        self.assertEqual("Variable2", area2.var_name)
-        self.assertEqual(102, area2.offset)
-        self.assertEqual("Type2", area2.type_name)
-        self.assertEqual(line2, area2.buffer)
-
     def compare(self, area, var_name, offset, type_name, buffer, size=0):
         message = "{} != {}"
         self.assertEqual(var_name, area.var_name, message.format(var_name, area.var_name))
         self.assertEqual(offset, area.offset, message.format(offset, area.offset))
         self.assertEqual(type_name, area.type_name, message.format(type_name, area.type_name))
-        self.assertEqual(buffer, area.buffer, message.format(buffer, area.buffer))
         if size > 0:
             self.assertEqual(size, area.size, message.format(size, area.size))
 

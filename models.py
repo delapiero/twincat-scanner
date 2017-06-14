@@ -1,4 +1,5 @@
 import os
+import re
 
 class TwinCatMemoryArea:
 
@@ -7,7 +8,6 @@ class TwinCatMemoryArea:
         self.offset = 0
         self.type_name = ""
         self.size = 1
-        self.buffer = ""
 
     def map(self):
         memmap = ""
@@ -26,6 +26,39 @@ class TwinCatType:
 class TwinCatScanner:
 
     def __init__(self):
+        r'''
+        REGEX special chars
+        .    - char
+        \w   - non whitespace char
+        \s   - whitespace char
+        \d   - digit
+        REGEX modifiers
+        ()   - group, in results
+        (?:) - group, not in results
+        *    - 0 or more, as many as possible
+        +    - 1 or more, as many as possible
+        *?   - 0 or more, as few as possible
+        +?   - 1 or more, as few as possible
+        '''
+        variable_regex = r'(\w+)\s+AT\s*%M.?(\d+)\s*:\s*(.*?)\s*;'
+        self.variable_pattern = re.compile(variable_regex, flags=re.DOTALL)
+        comments_regex = r'\(\*.+?\*\)'
+        self.comments_pattern = re.compile(comments_regex, flags=re.DOTALL)
+        constants_regex = r'VAR_GLOBAL CONSTANT\s+(.+?)\s+END_VAR'
+        self.constants_pattern = re.compile(constants_regex, flags=re.DOTALL)
+        const_field_regex = r'(\w+)\s*:\s*(\w+)\s*:=\s*(\d+)\s*;'
+        self.conts_field_pattern = re.compile(const_field_regex, flags=re.DOTALL)
+        type_regex = r'TYPE\s+(\w+)\s*:\s*STRUCT\s+(.+?)\s+END_STRUCT\s+END_TYPE'
+        self.type_pattern = re.compile(type_regex, flags=re.DOTALL)
+        type_field_regex = r'(\w+)\s*:\s*(.+?)(?:\s*:=\s*\w+)?\s*;'
+        self.type_field_pattern = re.compile(type_field_regex, flags=re.DOTALL)
+        array_regex = r'ARRAY\s*\[(.+?)\]\s*OF\s+(\w+)'
+        self.array_pattern = re.compile(array_regex, flags=re.DOTALL)
+        array_index_regex = r'(\w+)\.\.(\w+)'
+        self.array_index_pattern = re.compile(array_index_regex, flags=re.DOTALL)
+        string_regex = r'STRING\((\w+)\)'
+        self.string_pattern = re.compile(string_regex, flags=re.DOTALL)
+
         self.clear()
 
     def clear(self):
@@ -85,120 +118,65 @@ class TwinCatScanner:
         return lines
 
     def scan_file(self, file_content):
-        lines = []
-
         file_content = self.remove_comments(file_content)
         self.scan_global_constants(file_content)
         self.scan_type_structs(file_content)
-
-        file_content = file_content.split(";")
-        for line in file_content:
-            if "%MB" in line:
-                lines.append(line)
-
+        lines = self.variable_pattern.findall(file_content)
         return lines
 
     def remove_comments(self, file_content):
-        comments = self.get_text_blocks(file_content, "(*", "*)")
-        for comment in comments:
-            file_content = file_content.replace(comment, "")
-        return file_content
+        return self.comments_pattern.sub("", file_content)
 
     def scan_global_constants(self, file_content):
-        constant_blocks = self.get_text_blocks(file_content, "VAR_GLOBAL CONSTANT", "END_VAR")
-        for constant_block in constant_blocks:
-            constants = self.strip_block(constant_block, "VAR_GLOBAL CONSTANT", "END_VAR")
-            constants = constants.split(";")
-            for constant in constants:
-                if ":=" in constant:
-                    operator_split = constant.split(":=")
-                    if ":" in operator_split[0]:
-                        type_split = operator_split[0].split(":")
-                        global_constant_name = type_split[0].split()[-1].strip()
-                        global_constant_value = operator_split[1].strip()
-                        if not global_constant_name.isdigit() and global_constant_value.isdigit():
-                            self.global_constants[global_constant_name] = int(global_constant_value)
-                            print("--- CONSTANT %s := %s" % (global_constant_name, global_constant_value))
+        constants_blocks = self.constants_pattern.findall(file_content)
+        for constants_block in constants_blocks:
+            field_blocks = self.conts_field_pattern.findall(constants_block)
+            for field in field_blocks:
+                field_name = field[0]
+                # field_type = field[1]
+                field_value = field[2]
+                self.global_constants[field_name] = int(field_value)
+                print("--- CONSTANT %s := %s" % (field_name, field_value))
 
     def scan_type_structs(self, file_content):
-        type_struct_blocks = self.get_text_blocks(file_content, "TYPE", "END_TYPE")
+        type_struct_blocks = self.type_pattern.findall(file_content)
         for type_struct_block in type_struct_blocks:
-            if "STRUCT" in type_struct_block and "END_STRUCT" in type_struct_block:
-                self.scan_type_struct(type_struct_block)
-
-    def scan_type_struct(self, type_struct_block):
-        type_struct_block = self.strip_block(type_struct_block, "TYPE", "END_TYPE")
-        type_struct_size = 0
-        struct_split = type_struct_block.split("STRUCT")
-        type_struct_name = struct_split[0].strip().rstrip(":").strip()
-        self.type_sizes[type_struct_name] = TwinCatType(type_struct_size)
-        field_split = struct_split[1].split(";")
-        for field in field_split:
-            if ":" in field:
-                field_type_split = field.split(":")
-                field_name = field_type_split[0].split()[-1]
-                field_type = field_type_split[1].strip()
+            type_struct_name = type_struct_block[0]
+            type_struct_size = 0
+            self.type_sizes[type_struct_name] = TwinCatType(type_struct_size)
+            field_blocks = self.type_field_pattern.findall(type_struct_block[1])
+            for field in field_blocks:
+                field_name = field[0]
+                field_type = field[1]
                 self.type_sizes[type_struct_name].fields[field_name] = field_type
                 field_size = self.get_size(field_type)
                 type_struct_size = type_struct_size + field_size
-        self.type_sizes[type_struct_name].size = type_struct_size
-        print("--- TYPE %s := %d" % (type_struct_name, type_struct_size))
-
-    def get_text_blocks(self, content, start, end):
-        blocks = []
-        start_index = content.find(start)
-        end_index = content.find(end, start_index + len(start))
-        while start_index > -1 and end_index > -1 and start_index < end_index:
-            block = content[start_index:end_index + len(end)]
-            blocks.append(block)
-            start_index = content.find(start, end_index + len(end))
-            end_index = content.find(end, start_index + len(start))
-        return blocks
-
-    def strip_block(self, block, start, end):
-        return block.strip().lstrip(start).rstrip(end).strip()
+            self.type_sizes[type_struct_name].size = type_struct_size
+            print("--- TYPE %s := %d" % (type_struct_name, type_struct_size))
 
     def scan_lines(self, lines):
         self.notify("przetwarzam pliki")
-        memory_areas = []
+        areas = []
         for line in lines:
-            memory_area = self.scan_line(line)
-            memory_areas.append(memory_area)
-        memory_areas.sort(key=lambda area: area.var_name.lower())
-        memory_areas.sort(key=lambda area: area.offset)
-
-        for area in memory_areas:
+            area = TwinCatMemoryArea()
+            area.var_name = line[0]
+            area.offset = int(line[1])
+            area.type_name = line[2]
             area.size = self.get_size(area.type_name)
+            areas.append(area)
+
+        areas.sort(key=lambda area: area.var_name.lower())
+        areas.sort(key=lambda area: area.offset)
+
+        for area in areas:
             for current_adr in range(area.offset, area.offset + area.size):
                 if current_adr not in self.memory_map:
                     self.memory_map[current_adr] = area.var_name
                 else:
-                    self.memory_map[current_adr] = "{}, {}".format(self.memory_map[current_adr], area.var_name)
+                    self.memory_map[current_adr] += ", {}".format(area.var_name)
 
         self.notify("")
-        return memory_areas
-
-    def scan_line(self, line):
-        area = TwinCatMemoryArea()
-        area.buffer = line.strip()
-
-        name_split = line.split("%MB")
-        if len(name_split) == 2:
-            offset_split = name_split[1].split(":")
-
-            area.var_name = name_split[0].strip()
-            if area.var_name.endswith("AT"):
-                area.var_name = area.var_name.rstrip("AT")
-            area.var_name = area.var_name.split()[-1]
-
-            offset_str = offset_split[0].strip()
-            area.offset = int(offset_str)
-
-            area.type_name = offset_split[1].strip()
-            if area.type_name.endswith(";"):
-                area.type_name = area.type_name.rstrip(";")
-
-        return area
+        return areas
 
     def get_size(self, type_name):
         if type_name.startswith("POINTER"):
@@ -213,29 +191,31 @@ class TwinCatScanner:
             return 0
 
     def get_array_size(self, type_name):
-        array_type_and_range = type_name.strip().lstrip("ARRAY").split("OF", 1)
-        array_indexes = self.strip_block(array_type_and_range[0], "[", "]").split(",")
+        array_block = self.array_pattern.match(type_name)
+        array_indexes = self.array_index_pattern.findall(array_block[1])
         array_total_size = 1
         for array_index in array_indexes:
-            array_ranges = array_index.split("..")
-            if len(array_ranges) == 2:
-                array_limit = [0, 0]
-                for i in range(2):
-                    if array_ranges[i] in self.global_constants:
-                        array_limit[i] = self.global_constants[array_ranges[i]]
-                    elif array_ranges[i].isdigit():
-                        array_limit[i] = int(array_ranges[i])
-                array_size = abs(array_limit[1] - array_limit[0]) + 1
-                array_total_size = array_total_size * array_size
-        array_type = array_type_and_range[1].strip()
+            array_limit = [0, 0]
+            for i in range(2):
+                array_limit[i] = self.get_number(array_index[i], 0)
+            array_size = abs(array_limit[1] - array_limit[0]) + 1
+            array_total_size = array_total_size * array_size
+        array_type = array_block[2]
         array_type_size = self.get_size(array_type)
         return array_total_size * array_type_size
 
     def get_string_size(self, type_name):
-        if "(" in type_name:
-            size_str = self.strip_block(type_name, "STRING(", ")")
-            if size_str.isdigit():
-                return int(size_str) + 1
-            elif size_str in self.global_constants:
-                return self.global_constants[size_str] + 1
-        return 80 + 1
+        string_block = self.string_pattern.match(type_name)
+        if not string_block is None:
+            return self.get_number(string_block[1], 80) + 1
+        else:
+            return 81
+
+    def get_number(self, number_str, default_numer):
+        if number_str in self.global_constants:
+            return self.global_constants[number_str]
+        elif number_str.isdigit():
+            return int(number_str)
+        else:
+            return default_numer
+
