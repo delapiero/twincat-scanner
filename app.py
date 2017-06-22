@@ -3,6 +3,7 @@ import models
 
 from tkinter import *
 from tkinter import ttk
+from tkinter import messagebox
 from tkinter.ttk import *
 from tkinter.filedialog import askdirectory
 
@@ -22,22 +23,21 @@ class Application(tk.Frame):
 
     def create_widgets(self):
 
-        self.dir_select = ttk.Button(self)
-        self.dir_select["text"] = "Wybierz projekt"
-        self.dir_select["command"] = self.dir_select_command
+        self.dir_select = ttk.Button(self, text="Wybierz projekt", command=self.dir_select_command)
         self.dir_select.grid(row=0, column=0, sticky=NSEW)
 
         self.dir = StringVar()
         self.dir_path = ttk.Entry(self, textvariable=self.dir)
         self.dir_path.grid(row=1, column=0, sticky=NSEW)
 
-        self.dir_process = ttk.Button(self)
-        self.dir_process["text"] = "Wczytaj projekt"
-        self.dir_process["command"] = self.dir_process_command
+        self.dir_process = ttk.Button(self, text="Wczytaj projekt", command=self.dir_process_command)
         self.dir_process.grid(row=2, column=0, sticky=NSEW)
 
         self.quit = ttk.Button(self, text="Wyjście", command=root.destroy)
-        self.quit.grid(row=0, column=1, rowspan=3, sticky=NSEW)
+        self.quit.grid(row=0, column=1, rowspan=2, sticky=NSEW)
+
+        self.export = ttk.Button(self, text="CSV", command=self.csv_command)
+        self.export.grid(row=2, column=1, sticky=NSEW)
 
         self.main_area = ttk.Notebook(self)
         self.main_area.grid(row=3, column=0, columnspan=2, sticky=NSEW)
@@ -119,6 +119,13 @@ class Application(tk.Frame):
 
     def app_notify(self, notification):
         self.status.set(notification)
+
+    def csv_command(self):
+        with tk.filedialog.asksaveasfile(filetypes=[("csv files", "*.csv")]) as csv:
+            for area in self.scanner.memory_areas:
+                csv.write("{};{};{};\n".format(area.var_name, str(area.offset), area.type_name))
+            messagebox.showinfo("ProgressTwinCatScanner", "Zapisano plik")
+
 
 root = tk.Tk()
 root.rowconfigure(0, weight=1)
