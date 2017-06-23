@@ -206,7 +206,7 @@ class TwinCatScanner:
 
     def get_string_size(self, type_name):
         string_block = self.string_pattern.match(type_name)
-        if not string_block is None:
+        if string_block is not None:
             return self.get_number(string_block[1], 80) + 1
         else:
             return 81
