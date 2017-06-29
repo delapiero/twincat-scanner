@@ -58,9 +58,17 @@ class Application(tk.Frame):
         self.mem_list.column('#0', stretch=tk.NO, anchor=tk.CENTER)
         self.mem_list.column('#1', stretch=tk.NO)
 
+        self.filter_var = tk.StringVar()
+        self.filter_var.trace_add("write", self.filter_callback)
+        self.filter_entry = ttk.Entry(self, textvariable=self.filter_var)
+        self.filter_entry.grid(row=4, column=0, sticky=tk.NSEW)
+
+        self.clear_filter = ttk.Button(self, text="Wyczyść filtr", command=self.clear_filter_command)
+        self.clear_filter.grid(row=4, column=1, sticky=tk.NSEW)
+
         self.status = tk.StringVar()
         self.status_label = ttk.Label(self, textvariable=self.status)
-        self.status_label.grid(row=4, column=0, columnspan=2, sticky=tk.NSEW)
+        self.status_label.grid(row=5, column=0, columnspan=2, sticky=tk.NSEW)
 
     def create_tab(self, master, text, columns):
         tab = ttk.Frame(master)
@@ -92,25 +100,50 @@ class Application(tk.Frame):
     def dir_process_command(self):
         path = self.dir_path.get()
         self.scanner.run(path)
+        self.load()
+
+    def load(self):
+        text_filter = self.filter_var.get().upper()
+        self.load_memory_areas(text_filter=text_filter)
+        self.load_constants(text_filter=text_filter)
+        self.load_types(text_filter=text_filter)
+        self.load_memory_map(text_filter=text_filter)
+
+    def load_memory_areas(self, text_filter=""):
         self.memory_areas_list.delete(*self.memory_areas_list.get_children())
         for area in self.scanner.memory_areas:
-            area_values = [str(area.offset), area.size, area.type_name, area.map()]
-            self.memory_areas_list.insert('', 'end', area.var_name, text=area.var_name, values=area_values)
+            if not text_filter or text_filter in area.var_name.upper() or text_filter in area.type_name.upper():
+                area_values = [str(area.offset), area.size, area.type_name, area.map()]
+                self.memory_areas_list.insert('', 'end', area.var_name, text=area.var_name, values=area_values)
+
+    def load_constants(self, text_filter=""):
         self.const_list.delete(*self.const_list.get_children())
         for const_name in self.scanner.global_constants:
-            const_values = [str(self.scanner.global_constants[const_name])]
-            self.const_list.insert('', 'end', const_name, text=const_name, values=const_values)
+            if not text_filter or text_filter in const_name.upper():
+                const_values = [str(self.scanner.global_constants[const_name])]
+                self.const_list.insert('', 'end', const_name, text=const_name, values=const_values)
+
+    def load_types(self, text_filter=""):
         self.types_list.delete(*self.types_list.get_children())
         for type_size in self.scanner.type_sizes:
-            type_values = [str(self.scanner.type_sizes[type_size].size)]
-            self.types_list.insert('', 'end', type_size, text=type_size, values=type_values)
+            text_filter_positive = text_filter in type_size.upper()
             for field in self.scanner.type_sizes[type_size].fields:
-                field_values = [str(self.scanner.type_sizes[type_size].fields[field])]
-                self.types_list.insert(type_size, 'end', text=field, values=field_values)
+                field_value = str(self.scanner.type_sizes[type_size].fields[field])
+                text_filter_positive = text_filter_positive or text_filter in field.upper() or text_filter in field_value.upper()
+            if text_filter_positive:
+                type_values = [str(self.scanner.type_sizes[type_size].size)]
+                self.types_list.insert('', 'end', type_size, text=type_size, values=type_values)
+                for field in self.scanner.type_sizes[type_size].fields:
+                    field_values = [str(self.scanner.type_sizes[type_size].fields[field])]
+                    self.types_list.insert(type_size, 'end', text=field, values=field_values)
+
+    def load_memory_map(self, text_filter=""):
         self.mem_list.delete(*self.mem_list.get_children())
         for mem in self.scanner.memory_map:
-            mem_values = [str(self.scanner.memory_map[mem])]
-            self.mem_list.insert('', 'end', mem, text=mem, values=mem_values)
+            mem_value = str(self.scanner.memory_map[mem])
+            if not text_filter or text_filter in mem_value.upper():
+                mem_values = [mem_value]
+                self.mem_list.insert('', 'end', mem, text=mem, values=mem_values)
 
     def app_notify(self, notification):
         self.status.set(notification)
@@ -123,6 +156,11 @@ class Application(tk.Frame):
             messagebox.showinfo("ProgressTwinCatScanner", "Zapisano plik")
             csv.close()
 
+    def clear_filter_command(self):
+        self.filter_var.set("")
+
+    def filter_callback(self, a, b, c):
+        self.load()
 
 ROOT = tk.Tk()
 ROOT.title("ProgressTwinCatScanner")
