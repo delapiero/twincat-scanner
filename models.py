@@ -10,12 +10,7 @@ class TwinCatMemoryArea:
         self.size = 1
 
     def map(self):
-        memmap = ""
-        for _ in range(self.offset):
-            memmap = memmap + " "
-        for _ in range(self.size):
-            memmap = memmap + "#"
-        return memmap
+        return " " * self.offset + "#" * self.size
 
 class TwinCatType:
 
