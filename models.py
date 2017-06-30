@@ -9,9 +9,6 @@ class TwinCatMemoryArea:
         self.type_name = ""
         self.size = 1
 
-    def map(self):
-        return " " * self.offset + "#" * self.size
-
 class TwinCatType:
 
     def __init__(self, size=1):
@@ -45,7 +42,7 @@ class TwinCatScanner:
         self.conts_field_pattern = re.compile(const_field_regex, flags=re.DOTALL)
         type_regex = r'TYPE\s+(\w+)\s*:\s*STRUCT\s+(.+?)\s+END_STRUCT\s+END_TYPE'
         self.type_pattern = re.compile(type_regex, flags=re.DOTALL)
-        type_field_regex = r'(\w+)\s*:\s*(.+?)(?:\s*:=\s*\w+)?\s*;'
+        type_field_regex = r'(\w+)\s*:\s*(.+?)(?:\s*:=\s*[^;]+)?\s*;'
         self.type_field_pattern = re.compile(type_field_regex, flags=re.DOTALL)
         array_regex = r'ARRAY\s*\[(.+?)\]\s*OF\s+(\w+)'
         self.array_pattern = re.compile(array_regex, flags=re.DOTALL)
@@ -213,4 +210,7 @@ class TwinCatScanner:
             return int(number_str)
         else:
             return default_numer
+
+    def get_map(self, offset, size):
+        return " " * offset + "#" * size
 

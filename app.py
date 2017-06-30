@@ -113,8 +113,18 @@ class Application(tk.Frame):
         self.memory_areas_list.delete(*self.memory_areas_list.get_children())
         for area in self.scanner.memory_areas:
             if not text_filter or text_filter in area.var_name.upper() or text_filter in area.type_name.upper():
-                area_values = [str(area.offset), area.size, area.type_name, area.map()]
+                area_values = [str(area.offset), area.size, area.type_name, self.scanner.get_map(area.offset, area.size)]
                 self.memory_areas_list.insert('', 'end', area.var_name, text=area.var_name, values=area_values)
+                # types
+                if area.type_name in self.scanner.type_sizes:
+                    type_size = self.scanner.type_sizes[area.type_name]
+                    field_offset = area.offset
+                    for field in type_size.fields:
+                        field_text = "{}.{}".format(area.var_name, field)
+                        field_type = self.scanner.type_sizes[type_size.fields[field]]
+                        field_values = [str(field_offset), field_type.size, type_size.fields[field], self.scanner.get_map(field_offset, field_type.size)]
+                        field_offset += field_type.size                        
+                        self.memory_areas_list.insert(area.var_name, 'end', field_text, text=field_text, values=field_values)
 
     def load_constants(self, text_filter=""):
         self.const_list.delete(*self.const_list.get_children())
