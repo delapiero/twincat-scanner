@@ -32,7 +32,7 @@ class TwinCatScanner:
         *?   - 0 or more, as few as possible
         +?   - 1 or more, as few as possible
         '''
-        variable_regex = r'(\w+)\s+AT\s*%M.?(\d+)\s*:\s*(.*?)\s*;'
+        variable_regex = r'(\w+)\s+AT\s*%M.?(\d+)\s*:\s*(.*?)(?:\s*:=\s*[^;]+)?\s*;'
         self.variable_pattern = re.compile(variable_regex, flags=re.DOTALL)
         comments_regex = r'\(\*.+?\*\)'
         self.comments_pattern = re.compile(comments_regex, flags=re.DOTALL)
@@ -106,6 +106,7 @@ class TwinCatScanner:
                         file_content = file.read()
                         file_lines = self.scan_file(file_content)
                         lines += file_lines
+        self.compute_type_sizes()
         self.notify("")
         return lines
 
@@ -134,17 +135,33 @@ class TwinCatScanner:
         type_struct_blocks = self.type_pattern.findall(file_content)
         for type_struct_block in type_struct_blocks:
             type_struct_name = type_struct_block[0]
-            type_struct_size = 0
-            self.type_sizes[type_struct_name] = TwinCatType(type_struct_size)
+            self.type_sizes[type_struct_name] = TwinCatType()
             field_blocks = self.type_field_pattern.findall(type_struct_block[1])
             for field in field_blocks:
                 field_name = field[0]
                 field_type = field[1]
                 self.type_sizes[type_struct_name].fields[field_name] = field_type
-                field_size = self.get_size(field_type)
-                type_struct_size = type_struct_size + field_size
-            self.type_sizes[type_struct_name].size = type_struct_size
-            print("--- TYPE %s := %d" % (type_struct_name, type_struct_size))
+            print("--- TYPE %s" % type_struct_name)
+
+    def compute_type_sizes(self):
+        for type_size in self.type_sizes:
+            self.type_sizes[type_size].size = self.compute_type_size(type_size)
+
+    def compute_type_size(self, type_name):
+        type_size = self.type_sizes[type_name]
+        if len(type_size.fields) == 0:
+            return type_size.size
+        else:
+            type_struct_size = 0
+            for field in type_size.fields:
+                field_type = type_size.fields[field]
+                field_size = 0
+                if field_type in self.type_sizes:
+                    field_size = self.compute_type_size(field_type)
+                else:
+                    field_size = self.get_size(field_type)
+                type_struct_size += field_size
+            return type_struct_size
 
     def scan_lines(self, lines):
         self.notify("przetwarzam pliki")
