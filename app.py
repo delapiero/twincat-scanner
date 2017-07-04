@@ -6,8 +6,6 @@ import models
 
 class Application(tk.Frame):
 
-    scanner = models.TwinCatScanner()
-
     def __init__(self, master=None):
         super().__init__(master)
 
@@ -16,7 +14,6 @@ class Application(tk.Frame):
         self.rowconfigure(3, weight=1)
 
         self.create_widgets()
-        self.scanner.notify = self.app_notify
 
     def create_widgets(self):
 
@@ -98,8 +95,10 @@ class Application(tk.Frame):
         self.dir.set(tmp_dir)
 
     def dir_process_command(self):
+        scanner = models.TwinCatScanner()
+        scanner.notify = self.app_notify
         path = self.dir_path.get()
-        self.scanner.run(path)
+        self.memory_areas, self.types, self.constants, self.memory_map = scanner.run(path)
         self.load()
 
     def load(self):
@@ -111,51 +110,54 @@ class Application(tk.Frame):
 
     def load_memory_areas(self, text_filter=""):
         self.memory_areas_list.delete(*self.memory_areas_list.get_children())
-        for area in self.scanner.memory_areas:
+        for area in self.memory_areas:
             if not text_filter or text_filter in area.var_name.upper() or text_filter in area.type_name.upper():
                 self.load_memory_area('', area.var_name, area.type_name, area.offset, area.size)
 
     def load_memory_area(self, parent_name, var_name, type_name, offset, size):
-        values = [str(offset), size, type_name, self.scanner.get_map(offset, size)]
+        values = [str(offset), size, type_name, self.get_map(offset, size)]
         self.memory_areas_list.insert(parent_name, 'end', var_name, text=var_name, values=values)
-        if type_name in self.scanner.type_sizes:
-            type_size = self.scanner.type_sizes[type_name]
+        if type_name in self.types:
+            type_size = self.types[type_name]
             field_offset = offset
             for field in type_size.fields:
                 field_text = "{}.{}".format(var_name, field)
                 field_size = type_size.fields[field]
-                field_type = self.scanner.type_sizes[field_size]
+                field_type = self.types[field_size]
                 self.load_memory_area(var_name, field_text, field_size, field_offset, field_type.size)
                 field_offset += field_type.size
                 
     def load_constants(self, text_filter=""):
         self.const_list.delete(*self.const_list.get_children())
-        for const_name in self.scanner.global_constants:
+        for const_name in self.constants:
             if not text_filter or text_filter in const_name.upper():
-                const_values = [str(self.scanner.global_constants[const_name])]
+                const_values = [str(self.constants[const_name])]
                 self.const_list.insert('', 'end', const_name, text=const_name, values=const_values)
 
     def load_types(self, text_filter=""):
         self.types_list.delete(*self.types_list.get_children())
-        for type_size in self.scanner.type_sizes:
+        for type_size in self.types:
             text_filter_positive = text_filter in type_size.upper()
-            for field in self.scanner.type_sizes[type_size].fields:
-                field_value = str(self.scanner.type_sizes[type_size].fields[field])
+            for field in self.types[type_size].fields:
+                field_value = str(self.types[type_size].fields[field])
                 text_filter_positive = text_filter_positive or text_filter in field.upper() or text_filter in field_value.upper()
             if text_filter_positive:
-                type_values = [str(self.scanner.type_sizes[type_size].size)]
+                type_values = [str(self.types[type_size].size)]
                 self.types_list.insert('', 'end', type_size, text=type_size, values=type_values)
-                for field in self.scanner.type_sizes[type_size].fields:
-                    field_values = [str(self.scanner.type_sizes[type_size].fields[field])]
+                for field in self.types[type_size].fields:
+                    field_values = [str(self.types[type_size].fields[field])]
                     self.types_list.insert(type_size, 'end', text=field, values=field_values)
 
     def load_memory_map(self, text_filter=""):
         self.mem_list.delete(*self.mem_list.get_children())
-        for mem in self.scanner.memory_map:
-            mem_value = str(self.scanner.memory_map[mem])
+        for mem in self.memory_map:
+            mem_value = str(self.memory_map[mem])
             if not text_filter or text_filter in mem_value.upper():
                 mem_values = [mem_value]
                 self.mem_list.insert('', 'end', mem, text=mem, values=mem_values)
+
+    def get_map(self, offset, size):
+        return " " * offset + "#" * size
 
     def app_notify(self, notification):
         self.status.set(notification)
@@ -163,7 +165,7 @@ class Application(tk.Frame):
     def csv_command(self):
         csv = tk.filedialog.asksaveasfile(filetypes=[("csv files", "*.csv")])
         if csv is not None:
-            for area in self.scanner.memory_areas:
+            for area in self.memory_areas:
                 csv.write("{};{};{};\n".format(area.var_name, str(area.offset), area.type_name))
             messagebox.showinfo("ProgressTwinCatScanner", "Zapisano plik")
             csv.close()
