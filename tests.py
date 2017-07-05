@@ -45,12 +45,12 @@ class TwinCatScannerTests(unittest.TestCase):
             self.content += self.var[variable] + ";\n"
 
     def test_scan_file(self):
-        lines, types, constants = self.scanner.scan_file(self.content)
+        lines, constants, types = self.scanner.scan_file(self.content)
         types = self.scanner.compute_type_sizes(types, constants)
         self.assertEqual(1, constants["Const1"])
         self.assertEqual(5, constants["Const2"])
-        self.assertEqual(2, types["ST1"].size)
-        self.assertEqual(4, types["ST2"].size)
+        self.assertEqual(2, types["ST1"]['size'])
+        self.assertEqual(4, types["ST2"]['size'])
         self.assertEqual(9, len(lines))
 
     def test_remove_comments(self):
@@ -67,13 +67,13 @@ class TwinCatScannerTests(unittest.TestCase):
         constants = self.scanner.get_defualt_constants()
         types = self.scanner.scan_type_structs(self.types)
         types = self.scanner.compute_type_sizes(types, constants)
-        self.assertEqual(2, types["ST1"].size)
-        self.assertEqual(4, types["ST2"].size)
+        self.assertEqual(2, types["ST1"]['size'])
+        self.assertEqual(4, types["ST2"]['size'])
 
     def test_scan_lines(self):
-        lines, types, constants = self.scanner.scan_file(self.content)
+        lines, constants, types = self.scanner.scan_file(self.content)
         types = self.scanner.compute_type_sizes(types, constants)
-        mem_areas, _ = self.scanner.scan_lines(lines, types, constants)
+        mem_areas, _ = self.scanner.scan_lines(lines, constants, types)
 
         self.compare(mem_areas[0], "Variable1", 100, "ST1", 2)
         self.compare(mem_areas[1], "Variable2", 102, "ST2", 4)
@@ -87,25 +87,25 @@ class TwinCatScannerTests(unittest.TestCase):
 
     def compare(self, area, var_name, offset, type_name, size=0):
         message = "{} != {}"
-        self.assertEqual(var_name, area.var_name, message.format(var_name, area.var_name))
-        self.assertEqual(offset, area.offset, message.format(offset, area.offset))
-        self.assertEqual(type_name, area.type_name, message.format(type_name, area.type_name))
+        self.assertEqual(var_name, area['var_name'], message.format(var_name, area['var_name']))
+        self.assertEqual(offset, area['offset'], message.format(offset, area['offset']))
+        self.assertEqual(type_name, area['type_name'], message.format(type_name, area['type_name']))
         if size > 0:
-            self.assertEqual(size, area.size, message.format(size, area.size))
+            self.assertEqual(size, area['size'], message.format(size, area['size']))
 
     def test_get_size(self):
-        types = self.scanner.get_default_types()
         constants = self.scanner.get_defualt_constants()
-        self.assertEqual(1, self.scanner.get_size("BOOL", types, constants))
-        self.assertEqual(4, self.scanner.get_size("POINTER TO BOOL", types, constants))
+        types = self.scanner.get_default_types()
+        self.assertEqual(1, self.scanner.get_size("BOOL", constants, types))
+        self.assertEqual(4, self.scanner.get_size("POINTER TO BOOL", constants, types))
 
     def test_get_array_size(self):
         types = self.scanner.get_default_types()
         constants = self.scanner.get_defualt_constants()
-        self.assertEqual(2, self.scanner.get_array_size("ARRAY [1..2] OF BOOL", types, constants))
-        self.assertEqual(4, self.scanner.get_array_size("ARRAY [1..2] OF UINT", types, constants))
-        self.assertEqual(4, self.scanner.get_array_size("ARRAY [1..2,1..2] OF BOOL", types, constants))
-        self.assertEqual(8, self.scanner.get_array_size("ARRAY [1..2,1..2] OF UINT", types, constants))
+        self.assertEqual(2, self.scanner.get_array_size("ARRAY [1..2] OF BOOL", constants, types))
+        self.assertEqual(4, self.scanner.get_array_size("ARRAY [1..2] OF UINT", constants, types))
+        self.assertEqual(4, self.scanner.get_array_size("ARRAY [1..2,1..2] OF BOOL", constants, types))
+        self.assertEqual(8, self.scanner.get_array_size("ARRAY [1..2,1..2] OF UINT", constants, types))
 
     def test_get_string_size(self):
         constants = self.scanner.get_defualt_constants()

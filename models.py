@@ -1,26 +1,6 @@
 import os
 import re
 
-class TwinCatMemoryArea:
-
-    def __init__(self):
-        self.var_name = ""
-        self.offset = 0
-        self.type_name = ""
-        self.size = 1
-
-class TwinCatType:
-
-    def __init__(self, size=0):
-        self.size = size
-        self.fields = {}
-
-    def get_copy(self):
-        copy = TwinCatType(self.size)
-        for field in self.fields:
-            copy.fields[field] = self.fields[field]
-        return copy
-
 class TwinCatScanner:
     ''' '''
     r'''
@@ -52,33 +32,53 @@ class TwinCatScanner:
         print(status)
 
     def run(self, rootdir):
-        lines, types, constants = self.scan_dir(rootdir)
-        memory_areas, memory_map = self.scan_lines(lines, types, constants)
-        return memory_areas, types, constants, memory_map
+        lines, constants, types = self.scan_dir(rootdir)
+        memory_areas, memory_map = self.scan_lines(lines, constants, types)
+        return memory_areas, constants, types, memory_map
+
+    def get_memory_area(self):
+        return {
+            'var_name' : "",
+            'offset' : 0,
+            'type_name' : "",
+            'size' : 1
+        }
+
+    def get_type(self, size=0, fields={}):
+        return {
+            'size' : size,
+            'fields' : fields
+        }
+
+    def copy_type(self, twincat_type):
+        copy = self.get_type(twincat_type['size'])
+        for field in twincat_type['fields']:
+            copy['fields'][field] = twincat_type['fields'][field]
+        return copy
 
     def get_default_types(self):
         return {
-            "BOOL" : TwinCatType(1),
-            "BYTE" : TwinCatType(1),
-            "WORD" : TwinCatType(2),
-            "DWORD" : TwinCatType(4),
-            "SINT" : TwinCatType(1),
-            "INT" : TwinCatType(2),
-            "DINT" : TwinCatType(4),
-            "LINT" : TwinCatType(8),
-            "USINT" : TwinCatType(1),
-            "UINT" : TwinCatType(2),
-            "UDINT" : TwinCatType(4),
-            "ULINT" : TwinCatType(8),
-            "REAL" : TwinCatType(4),
-            "LREAL" : TwinCatType(8),
-            "TIME" : TwinCatType(4),
-            "TIME_OF_DAY" : TwinCatType(4),
-            "TOD" : TwinCatType(4),
-            "DATE" : TwinCatType(4),
-            "DATE_AND_TIME" : TwinCatType(4),
-            "DT" : TwinCatType(4),
-            "POINTER" : TwinCatType(4),
+            "BOOL" : self.get_type(1),
+            "BYTE" : self.get_type(1),
+            "WORD" : self.get_type(2),
+            "DWORD" : self.get_type(4),
+            "SINT" : self.get_type(1),
+            "INT" : self.get_type(2),
+            "DINT" : self.get_type(4),
+            "LINT" : self.get_type(8),
+            "USINT" : self.get_type(1),
+            "UINT" : self.get_type(2),
+            "UDINT" : self.get_type(4),
+            "ULINT" : self.get_type(8),
+            "REAL" : self.get_type(4),
+            "LREAL" : self.get_type(8),
+            "TIME" : self.get_type(4),
+            "TIME_OF_DAY" : self.get_type(4),
+            "TOD" : self.get_type(4),
+            "DATE" : self.get_type(4),
+            "DATE_AND_TIME" : self.get_type(4),
+            "DT" : self.get_type(4),
+            "POINTER" : self.get_type(4),
         }
 
     def get_defualt_constants(self):
@@ -97,23 +97,23 @@ class TwinCatScanner:
                 if not path.upper().endswith("BAK"):
                     with open(os.path.join(root, path), 'r', errors='replace') as file:
                         file_content = file.read()
-                        file_lines, file_types, file_constants = self.scan_file(file_content)
+                        file_lines, file_constants, file_types = self.scan_file(file_content)
                         for line in file_lines:
                             lines.append(line)
-                        for file_type in file_types:
-                            types[file_type] = file_types[file_type].get_copy()
                         for file_constant in file_constants:
                             constants[file_constant] = file_constants[file_constant]
+                        for file_type in file_types:
+                            types[file_type] = self.copy_type(file_types[file_type])
         types_copy = self.compute_type_sizes(types, constants)
         self.notify("")
-        return lines, types_copy, constants
+        return lines, constants, types_copy
 
     def scan_file(self, file_content):
         file_content = self.remove_comments(file_content)
         constants = self.scan_global_constants(file_content)
         types = self.scan_type_structs(file_content)
         lines = self.variable_pattern.findall(file_content)
-        return lines, types, constants
+        return lines, constants, types
 
     def remove_comments(self, file_content):
         return self.comments_pattern.sub("", file_content)
@@ -128,7 +128,7 @@ class TwinCatScanner:
                 # field_type = field[1]
                 field_value = field[2]
                 constants[field_name] = int(field_value)
-                print("--- CONSTANT %s := %s" % (field_name, field_value))
+                print("--- CONSTANT {} := {}".format(field_name, field_value))
         return constants
 
     def scan_type_structs(self, file_content):
@@ -136,74 +136,74 @@ class TwinCatScanner:
         type_struct_blocks = self.type_pattern.findall(file_content)
         for type_struct_block in type_struct_blocks:
             type_struct_name = type_struct_block[0]
-            types[type_struct_name] = TwinCatType()
+            types[type_struct_name] = self.get_type()
             field_blocks = self.type_field_pattern.findall(type_struct_block[1])
             for field in field_blocks:
                 field_name = field[0]
                 field_type = field[1]
-                types[type_struct_name].fields[field_name] = field_type
-            print("--- TYPE %s" % type_struct_name)
+                types[type_struct_name]['fields'][field_name] = field_type
+            print("--- TYPE {}".format(type_struct_name))
         return types
 
     def compute_type_sizes(self, types, constants):
         types_copy = {}
         for type_name in types:
-            types_copy[type_name] = types[type_name].get_copy()
-            types_copy[type_name].size = self.compute_type_size(type_name, types, constants)
+            types_copy[type_name] = self.copy_type(types[type_name])
+            types_copy[type_name]['size'] = self.compute_type_size(type_name, types, constants)
         return types_copy
 
     def compute_type_size(self, type_name, types, constants):
-        type_size = types[type_name]
-        if not type_size.fields:
-            return type_size.size
+        twincat_type = types[type_name]
+        if not twincat_type['fields']:
+            return twincat_type['size']
         else:
             type_struct_size = 0
-            for field in type_size.fields:
-                field_type = type_size.fields[field]
+            for field in twincat_type['fields']:
+                field_type = twincat_type['fields'][field]
                 if field_type in types:
                     type_struct_size += self.compute_type_size(field_type, types, constants)
                 else:
-                    type_struct_size += self.get_size(field_type, types, constants)
+                    type_struct_size += self.get_size(field_type, constants, types)
             return type_struct_size
 
-    def scan_lines(self, lines, types, constants):
+    def scan_lines(self, lines, constants, types):
         self.notify("przetwarzam pliki")
-        mem_areas = list(map(lambda line: self.scan_line(line, types, constants), lines))
-        mem_areas.sort(key=lambda area: area.var_name.lower())
-        mem_areas.sort(key=lambda area: area.offset)
+        mem_areas = list(map(lambda line: self.scan_line(line, constants, types), lines))
+        mem_areas.sort(key=lambda area: area['var_name'].lower())
+        mem_areas.sort(key=lambda area: area['offset'])
 
         mem_map = {}
         for area in mem_areas:
-            for current_adr in range(area.offset, area.offset + area.size):
+            for current_adr in range(area['offset'], area['offset'] + area['size']):
                 if current_adr not in mem_map:
-                    mem_map[current_adr] = area.var_name
+                    mem_map[current_adr] = area['var_name']
                 else:
-                    mem_map[current_adr] += ", {}".format(area.var_name)
+                    mem_map[current_adr] += ", {}".format(area['var_name'])
 
         self.notify("")
         return mem_areas, mem_map
 
-    def scan_line(self, line, types, constants):
-        area = TwinCatMemoryArea()
-        area.var_name = line[0]
-        area.offset = int(line[1])
-        area.type_name = line[2]
-        area.size = self.get_size(area.type_name, types, constants)
+    def scan_line(self, line, constants, types):
+        area = self.get_memory_area()
+        area['var_name'] = line[0]
+        area['offset'] = int(line[1])
+        area['type_name'] = line[2]
+        area['size'] = self.get_size(area['type_name'], constants, types)
         return area
 
-    def get_size(self, type_name, types, constants):
+    def get_size(self, type_name, constants, types):
         if type_name.startswith("POINTER"):
-            return types["POINTER"].size
+            return types["POINTER"]['size']
         elif type_name.startswith("ARRAY"):
-            return self.get_array_size(type_name, types, constants)
+            return self.get_array_size(type_name, constants, types)
         elif type_name.startswith("STRING"):
             return self.get_string_size(type_name, constants)
         elif type_name in types:
-            return types[type_name].size
+            return types[type_name]['size']
         else:
             return 0
 
-    def get_array_size(self, type_name, types, constants):
+    def get_array_size(self, type_name, constants, types):
         array_block = self.array_pattern.match(type_name)
         array_indexes = self.array_index_pattern.findall(array_block[1])
         array_total_size = 1
@@ -214,7 +214,7 @@ class TwinCatScanner:
             array_size = abs(array_limit[1] - array_limit[0]) + 1
             array_total_size = array_total_size * array_size
         array_type = array_block[2]
-        array_type_size = self.get_size(array_type, types, constants)
+        array_type_size = self.get_size(array_type, constants, types)
         return array_total_size * array_type_size
 
     def get_string_size(self, type_name, constants):
