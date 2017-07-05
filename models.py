@@ -1,5 +1,6 @@
 import os
 import re
+import copy
 
 class TwinCatScanner:
     ''' '''
@@ -36,25 +37,11 @@ class TwinCatScanner:
         memory_areas, memory_map = self.scan_lines(lines, constants, types)
         return memory_areas, constants, types, memory_map
 
-    def get_memory_area(self):
-        return {
-            'var_name' : "",
-            'offset' : 0,
-            'type_name' : "",
-            'size' : 1
-        }
-
-    def get_type(self, size=0, fields={}):
+    def get_type(self, size=0, fields=None):
         return {
             'size' : size,
-            'fields' : fields
+            'fields' : fields if fields is not None else {}
         }
-
-    def copy_type(self, twincat_type):
-        copy = self.get_type(twincat_type['size'])
-        for field in twincat_type['fields']:
-            copy['fields'][field] = twincat_type['fields'][field]
-        return copy
 
     def get_default_types(self):
         return {
@@ -98,21 +85,18 @@ class TwinCatScanner:
                     with open(os.path.join(root, path), 'r', errors='replace') as file:
                         file_content = file.read()
                         file_lines, file_constants, file_types = self.scan_file(file_content)
-                        for line in file_lines:
-                            lines.append(line)
-                        for file_constant in file_constants:
-                            constants[file_constant] = file_constants[file_constant]
-                        for file_type in file_types:
-                            types[file_type] = self.copy_type(file_types[file_type])
+                        lines.extend(file_lines)
+                        constants.update(file_constants)
+                        types.update(file_types)
         types_copy = self.compute_type_sizes(types, constants)
         self.notify("")
         return lines, constants, types_copy
 
     def scan_file(self, file_content):
-        file_content = self.remove_comments(file_content)
-        constants = self.scan_global_constants(file_content)
-        types = self.scan_type_structs(file_content)
-        lines = self.variable_pattern.findall(file_content)
+        cleaned_file_content = self.remove_comments(file_content)
+        constants = self.scan_global_constants(cleaned_file_content)
+        types = self.scan_type_structs(cleaned_file_content)
+        lines = self.variable_pattern.findall(cleaned_file_content)
         return lines, constants, types
 
     def remove_comments(self, file_content):
@@ -120,16 +104,14 @@ class TwinCatScanner:
 
     def scan_global_constants(self, file_content):
         constants = self.get_defualt_constants()
-        constants_blocks = self.constants_pattern.findall(file_content)
-        for constants_block in constants_blocks:
-            field_blocks = self.conts_field_pattern.findall(constants_block)
-            for field in field_blocks:
-                field_name = field[0]
-                # field_type = field[1]
-                field_value = field[2]
-                constants[field_name] = int(field_value)
-                print("--- CONSTANT {} := {}".format(field_name, field_value))
+        global_constants_blocks = self.constants_pattern.findall(file_content)
+        for global_constants_block in global_constants_blocks:
+            constant_block = self.conts_field_pattern.findall(global_constants_block)
+            constants.update(dict(map(self.scan_constant, constant_block)))
         return constants
+
+    def scan_constant(self, block):
+        return (block[0], int(block[2]))
 
     def scan_type_structs(self, file_content):
         types = self.get_default_types()
@@ -138,17 +120,16 @@ class TwinCatScanner:
             type_struct_name = type_struct_block[0]
             types[type_struct_name] = self.get_type()
             field_blocks = self.type_field_pattern.findall(type_struct_block[1])
-            for field in field_blocks:
-                field_name = field[0]
-                field_type = field[1]
-                types[type_struct_name]['fields'][field_name] = field_type
-            print("--- TYPE {}".format(type_struct_name))
+            types[type_struct_name]['fields'] = dict(map(self.scan_type_struct, field_blocks))
         return types
+
+    def scan_type_struct(self, block):
+        return (block[0], block[1])
 
     def compute_type_sizes(self, types, constants):
         types_copy = {}
         for type_name in types:
-            types_copy[type_name] = self.copy_type(types[type_name])
+            types_copy[type_name] = copy.deepcopy(types[type_name])
             types_copy[type_name]['size'] = self.compute_type_size(type_name, types, constants)
         return types_copy
 
@@ -172,10 +153,11 @@ class TwinCatScanner:
         mem_areas.sort(key=lambda area: area['var_name'].lower())
         mem_areas.sort(key=lambda area: area['offset'])
 
-        mem_map = {}
+        mem_map_max = max(map(lambda area: area['offset'] + area['size'], mem_areas))
+        mem_map = dict((x, None) for x in range(mem_map_max))
         for area in mem_areas:
             for current_adr in range(area['offset'], area['offset'] + area['size']):
-                if current_adr not in mem_map:
+                if mem_map[current_adr] is None:
                     mem_map[current_adr] = area['var_name']
                 else:
                     mem_map[current_adr] += ", {}".format(area['var_name'])
@@ -184,12 +166,12 @@ class TwinCatScanner:
         return mem_areas, mem_map
 
     def scan_line(self, line, constants, types):
-        area = self.get_memory_area()
-        area['var_name'] = line[0]
-        area['offset'] = int(line[1])
-        area['type_name'] = line[2]
-        area['size'] = self.get_size(area['type_name'], constants, types)
-        return area
+        return {
+            'var_name' : line[0],
+            'offset' : int(line[1]),
+            'type_name' : line[2],
+            'size' : self.get_size(line[2], constants, types)
+        }
 
     def get_size(self, type_name, constants, types):
         if type_name.startswith("POINTER"):

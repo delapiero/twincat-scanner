@@ -122,12 +122,23 @@ class Application(tk.Frame):
     def refresh_list(self, treeview, items, text_filter=""):
         treeview.delete(*treeview.get_children())
         for item in items:
-            if not item[0] or treeview.exists(item[0]):
-                filter_positive = not text_filter or text_filter in item[1].upper()
-                for val in item[2]:
-                    filter_positive = filter_positive or text_filter in str(val).upper()
-                if filter_positive:
-                    treeview.insert(item[0], 'end', item[1], text=item[1], values=item[2])
+            if not treeview.exists(item[1]) and self.filter_item(item, text_filter):
+                self.insert_item(item, treeview, items)
+
+    def filter_item(self, item, text_filter):
+        if not text_filter or text_filter in item[1].upper():
+            return True
+        for val in item[2]:
+            if text_filter in str(val).upper():
+                return True
+        return False
+
+    def insert_item(self, item, treeview, items):
+        if item[0] and not treeview.exists(item[0]):
+            for parent in items:
+                if parent[1] == item[0]:
+                    self.insert_item(parent, treeview, items)
+        treeview.insert(item[0], 'end', item[1], text=item[1], values=item[2])
 
     def load_memory_areas(self, memory_areas, types):
         self.memory_areas_items.clear()
@@ -175,10 +186,31 @@ class Application(tk.Frame):
     def csv_command(self):
         csv = tk.filedialog.asksaveasfile(filetypes=[("csv files", "*.csv")])
         if csv is not None:
-            for item in self.memory_areas_items:
-                csv.write("{};{};{};\n".format(item[1], item[1][0], item[1][2]))
+            selected = self.main_area.index(self.main_area.select())
+            if selected == 0:
+                self.csv_write(csv, self.memory_areas_list, self.csv_memory_areas)
+            elif selected == 1:
+                self.csv_write(csv, self.const_list, self.csv_other)
+            elif selected == 2:
+                self.csv_write(csv, self.types_list, self.csv_other, subitems=True)
+            elif selected == 3:
+                self.csv_write(csv, self.mem_list, self.csv_other)
             messagebox.showinfo("ProgressTwinCatScanner", "Zapisano plik")
-            csv.close()
+        csv.close()
+
+    def csv_write(self, csv, treeview, csv_format, subitems=False, item=None):
+        childen = treeview.get_children(item)
+        for child in childen:
+            item = treeview.item(child)
+            csv.write(csv_format(item))
+            if subitems:
+                self.csv_write(csv, treeview, csv_format, subitems=True, item=child)
+
+    def csv_memory_areas(self, item):
+        return "{};{};{};\n".format(item['text'], item['values'][0], item['values'][2])
+
+    def csv_other(self, item):
+        return "{};{};\n".format(item['text'], item['values'][0])
 
     def clear_filter_command(self):
         self.filter_var.set("")
