@@ -160,7 +160,7 @@ class TwinCatScanner:
         mem_map = dict((x, "") for x in range(mem_map_max))
         for area in mem_areas:
             for current_adr in range(area['offset'], area['offset'] + area['size']):
-                mem_map_entry = self.get_mem_map_entry(area, current_adr, constants, types)
+                mem_map_entry = self.get_mem_map_entry(area['var_name'], area['offset'], area['type_name'], current_adr, constants, types)
                 if mem_map[current_adr] == "":
                     mem_map[current_adr] = mem_map_entry
                 else:
@@ -169,10 +169,8 @@ class TwinCatScanner:
         self.notify("")
         return mem_areas, mem_map
 
-    def get_mem_map_entry(self, area, current_adr, constants, types):
-        type_name = area['type_name']
-
-        relative_adr = current_adr - area['offset']
+    def get_mem_map_entry(self, var_name, offset, type_name, current_adr, constants, types):
+        relative_adr = current_adr - offset
         if type_name.startswith("ARRAY"):
             array_block = self.array_pattern.match(type_name)
             array_indexes = self.array_index_pattern.findall(array_block[1])
@@ -190,19 +188,20 @@ class TwinCatScanner:
                 entry_val = entry_val % array_total_size
                 if entry:
                     entry = "," + entry
-                entry = str(entry_val) + entry
-            return area['var_name'] + "[" + entry + "]"
+                entry = str(entry_val + array_limit[0]) + entry
+            return var_name + "[" + entry + "]"
 
         twincat_type = types[type_name]
         if twincat_type['fields']:
             field_offset = 0
             for field in twincat_type['fields']:
-                field_type = twincat_type['fields'][field]
-                field_offset += self.get_size(field_type, constants, types)
-                if relative_adr < field_offset:
-                    return "{}.{}".format(area['var_name'], field)
+                field_type_name = twincat_type['fields'][field]
+                field_size = self.get_size(field_type_name, constants, types)
+                if relative_adr < field_offset + field_size:
+                    return self.get_mem_map_entry("{}.{}".format(var_name, field), offset + field_offset, field_type_name, current_adr, constants, types)
+                field_offset += field_size
 
-        return area['var_name']
+        return var_name
 
     def scan_line(self, line, constants, types):
         return {
