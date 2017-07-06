@@ -36,7 +36,9 @@ class Application(tk.Frame):
         self.main_area = ttk.Notebook(self)
         self.main_area.grid(row=3, column=0, columnspan=2, sticky=tk.NSEW)
 
-        self.memory_areas_list = self.create_tab(self.main_area, "Zmienne", ("name", "offset", "size", "type", "map"))
+        self.tab_names = {0 : "Zmienne", 1 : "Stałe", 2 : "Typy", 3 : "Pamięć"}
+
+        self.memory_areas_list = self.create_tab(self.main_area, self.tab_names[0], ("name", "offset", "size", "type", "map"))
         self.memory_areas_list.column('#0', stretch=tk.NO)
         self.memory_areas_list.column('#1', stretch=tk.NO, anchor=tk.CENTER)
         self.memory_areas_list.column('#2', stretch=tk.NO, anchor=tk.CENTER)
@@ -44,17 +46,17 @@ class Application(tk.Frame):
         self.memory_areas_list.column('#4', stretch=tk.YES, minwidth=10000)
         self.memory_areas_items = []
 
-        self.const_list = self.create_tab(self.main_area, "Stałe", ("name", "value"))
+        self.const_list = self.create_tab(self.main_area, self.tab_names[1], ("name", "value"))
         self.const_list.column('#0', stretch=tk.NO)
         self.const_list.column('#1', stretch=tk.NO, anchor=tk.CENTER)
         self.const_items = []
 
-        self.types_list = self.create_tab(self.main_area, "Typy", ("name", "size"))
+        self.types_list = self.create_tab(self.main_area, self.tab_names[2], ("name", "size"))
         self.types_list.column('#0', stretch=tk.NO)
         self.types_list.column('#1', stretch=tk.NO, anchor=tk.CENTER)
         self.types_items = []
 
-        self.mem_list = self.create_tab(self.main_area, "Pamięć", ("adr", "variables"))
+        self.mem_list = self.create_tab(self.main_area, self.tab_names[3], ("adr", "variables"))
         self.mem_list.column('#0', stretch=tk.NO, anchor=tk.CENTER)
         self.mem_list.column('#1', stretch=tk.NO)
         self.mem_items = []
@@ -114,10 +116,13 @@ class Application(tk.Frame):
 
     def refresh(self):
         text_filter = self.filter_var.get().upper()
-        self.refresh_list(self.memory_areas_list, self.memory_areas_items, text_filter=text_filter)
-        self.refresh_list(self.const_list, self.const_items, text_filter=text_filter)
-        self.refresh_list(self.types_list, self.types_items, text_filter=text_filter)
-        self.refresh_list(self.mem_list, self.mem_items, text_filter=text_filter)
+        text_data = (
+            (self.memory_areas_list, self.memory_areas_items),
+            (self.const_list, self.const_items),
+            (self.types_list, self.types_items),
+            (self.mem_list, self.mem_items))
+        for current_data in text_data:
+            self.refresh_list(current_data[0], current_data[1], text_filter=text_filter)
 
     def refresh_list(self, treeview, items, text_filter=""):
         treeview.delete(*treeview.get_children())
@@ -184,9 +189,15 @@ class Application(tk.Frame):
         self.status.set(notification)
 
     def csv_command(self):
-        csv = tk.filedialog.asksaveasfile(filetypes=[("csv files", "*.csv")])
+        import os
+        path = self.dir_path.get()
+        checked = path if path else "ProgressTwinCatScan"
+        basedir = os.path.normpath(checked)
+        basename = os.path.basename(basedir)
+        selected = self.main_area.index(self.main_area.select())
+        filename = "{}_{}".format(basename, self.tab_names[selected])
+        csv = tk.filedialog.asksaveasfile(filetypes=[("csv files", "*.csv")], initialfile=filename)
         if csv is not None:
-            selected = self.main_area.index(self.main_area.select())
             if selected == 0:
                 self.csv_write(csv, self.memory_areas_list, self.csv_memory_areas)
             elif selected == 1:
@@ -196,7 +207,7 @@ class Application(tk.Frame):
             elif selected == 3:
                 self.csv_write(csv, self.mem_list, self.csv_other)
             messagebox.showinfo("ProgressTwinCatScanner", "Zapisano plik")
-        csv.close()
+            csv.close()
 
     def csv_write(self, csv, treeview, csv_format, subitems=False, item=None):
         childen = treeview.get_children(item)

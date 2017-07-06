@@ -153,17 +153,56 @@ class TwinCatScanner:
         mem_areas.sort(key=lambda area: area['var_name'].lower())
         mem_areas.sort(key=lambda area: area['offset'])
 
-        mem_map_max = max(map(lambda area: area['offset'] + area['size'], mem_areas))
-        mem_map = dict((x, None) for x in range(mem_map_max))
+        mem_map_max = 0
+        if mem_areas:
+            mem_map_max = max(map(lambda area: area['offset'] + area['size'], mem_areas))
+
+        mem_map = dict((x, "") for x in range(mem_map_max))
         for area in mem_areas:
             for current_adr in range(area['offset'], area['offset'] + area['size']):
-                if mem_map[current_adr] is None:
-                    mem_map[current_adr] = area['var_name']
+                mem_map_entry = self.get_mem_map_entry(area, current_adr, constants, types)
+                if mem_map[current_adr] == "":
+                    mem_map[current_adr] = mem_map_entry
                 else:
-                    mem_map[current_adr] += ", {}".format(area['var_name'])
+                    mem_map[current_adr] += ", {}".format(mem_map_entry)
 
         self.notify("")
         return mem_areas, mem_map
+
+    def get_mem_map_entry(self, area, current_adr, constants, types):
+        type_name = area['type_name']
+
+        relative_adr = current_adr - area['offset']
+        if type_name.startswith("ARRAY"):
+            array_block = self.array_pattern.match(type_name)
+            array_indexes = self.array_index_pattern.findall(array_block[1])
+            array_indexes.reverse()
+            array_type = array_block[2]
+            array_total_size = self.get_size(array_type, constants, types)
+            entry = ""
+            for array_index in array_indexes:
+                array_limit = [0, 0]
+                for i in range(2):
+                    array_limit[i] = self.get_number(array_index[i], constants, 0)
+                array_size = abs(array_limit[1] - array_limit[0]) + 1
+                entry_val = relative_adr // array_total_size
+                array_total_size = array_total_size * array_size
+                entry_val = entry_val % array_total_size
+                if entry:
+                    entry = "," + entry
+                entry = str(entry_val) + entry
+            return area['var_name'] + "[" + entry + "]"
+
+        twincat_type = types[type_name]
+        if twincat_type['fields']:
+            field_offset = 0
+            for field in twincat_type['fields']:
+                field_type = twincat_type['fields'][field]
+                field_offset += self.get_size(field_type, constants, types)
+                if relative_adr < field_offset:
+                    return "{}.{}".format(area['var_name'], field)
+
+        return area['var_name']
 
     def scan_line(self, line, constants, types):
         return {
@@ -188,16 +227,15 @@ class TwinCatScanner:
     def get_array_size(self, type_name, constants, types):
         array_block = self.array_pattern.match(type_name)
         array_indexes = self.array_index_pattern.findall(array_block[1])
-        array_total_size = 1
+        array_type = array_block[2]
+        array_total_size = self.get_size(array_type, constants, types)
         for array_index in array_indexes:
             array_limit = [0, 0]
             for i in range(2):
                 array_limit[i] = self.get_number(array_index[i], constants, 0)
             array_size = abs(array_limit[1] - array_limit[0]) + 1
             array_total_size = array_total_size * array_size
-        array_type = array_block[2]
-        array_type_size = self.get_size(array_type, constants, types)
-        return array_total_size * array_type_size
+        return array_total_size
 
     def get_string_size(self, type_name, constants):
         string_block = self.string_pattern.match(type_name)
