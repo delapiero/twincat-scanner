@@ -127,26 +127,44 @@ class Application(tk.Frame):
         self.memory_areas_select_command(None)
 
     def dir_process_command_async(self):
-        t = threading.Thread(target=self.dir_process_command)
-        t.daemon = True
-        t.start()
+        thr = threading.Thread(target=self.dir_process_command)
+        thr.daemon = True
+        thr.start()
 
     def load(self, memory_areas, types, constants, memory_map):
-        self.load_memory_areas(memory_areas)
-        self.load_constants(constants)
-        self.load_types(types)
-        self.load_memory_map(memory_map)
+        self.app_notify("ładowanie")
+        thrs = []
+        thrs.append(threading.Thread(target=self.load_memory_areas, args=[memory_areas]))
+        thrs.append(threading.Thread(target=self.load_constants, args=[constants]))
+        thrs.append(threading.Thread(target=self.load_types, args=[types]))
+        thrs.append(threading.Thread(target=self.load_memory_map, args=[memory_map]))
+        for thr in thrs:
+            thr.daemon = True
+            thr.start()
+        for thr in thrs:
+            thr.join()
+        self.app_notify("")
         self.refresh()
 
     def refresh(self):
+        self.app_notify("odświeżanie")
         text_filter = self.filter_var.get().upper()
         text_data = (
             (self.memory_areas_list, self.memory_areas_items),
             (self.const_list, self.const_items),
             (self.types_list, self.types_items),
             (self.mem_list, self.mem_items))
+        thrs = []
         for current_data in text_data:
-            self.refresh_list(current_data[0], current_data[1], text_filter=text_filter)
+            thr_args = [current_data[0], current_data[1]]
+            thr_kwargs = {'text_filter': text_filter}
+            thrs.append(threading.Thread(target=self.refresh_list, args=thr_args, kwargs=thr_kwargs))
+        for thr in thrs:
+            thr.daemon = True
+            thr.start()
+        for thr in thrs:
+            thr.join()
+        self.app_notify("")
 
     def refresh_list(self, treeview, items, text_filter=""):
         treeview.delete(*treeview.get_children())

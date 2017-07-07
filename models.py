@@ -169,28 +169,38 @@ class TwinCatScanner:
         self.notify("")
         return mem_areas, mem_map
 
+    def get_array_limits(self, array_block, constants):
+        array_indexes = self.array_index_pattern.findall(array_block[1])
+        array_indexes.reverse()
+        for array_index in array_indexes:
+            array_limit = [0, 0, 0]
+            for i in range(2):
+                array_limit[i] = self.get_number(array_index[i], constants, 0)
+            array_limit[2] = abs(array_limit[1] - array_limit[0]) + 1
+            yield array_limit
 
     def get_mem_map_entry(self, var_name, offset, type_name, current_adr, constants, types):
         relative_adr = current_adr - offset
+
         if type_name.startswith("ARRAY"):
             array_block = self.array_pattern.match(type_name)
-            array_indexes = self.array_index_pattern.findall(array_block[1])
-            array_indexes.reverse()
             array_type = array_block[2]
-            array_total_size = self.get_size(array_type, constants, types)
+            array_type_size = self.get_size(array_type, constants, types)
+            array_total_size = array_type_size
             entry = ""
-            for array_index in array_indexes:
-                array_limit = [0, 0]
-                for i in range(2):
-                    array_limit[i] = self.get_number(array_index[i], constants, 0)
-                array_size = abs(array_limit[1] - array_limit[0]) + 1
+            for array_limit in self.get_array_limits(array_block, constants):
                 entry_val = relative_adr // array_total_size
-                array_total_size = array_total_size * array_size
+                array_total_size = array_total_size * array_limit[2]
                 entry_val = entry_val % array_total_size
                 if entry:
                     entry = "," + entry
                 entry = str(entry_val + array_limit[0]) + entry
-            return var_name + "[" + entry + "]"
+            mem_map_entry = var_name + "[" + entry + "]"
+            if array_type in types:
+                twincat_type = types[array_type]
+                if twincat_type['fields']:
+                    return self.get_mem_map_entry(mem_map_entry, offset, array_type, offset + relative_adr % array_type_size, constants, types)
+            return mem_map_entry
 
         if type_name in types:
             twincat_type = types[type_name]
@@ -227,15 +237,10 @@ class TwinCatScanner:
 
     def get_array_size(self, type_name, constants, types):
         array_block = self.array_pattern.match(type_name)
-        array_indexes = self.array_index_pattern.findall(array_block[1])
         array_type = array_block[2]
         array_total_size = self.get_size(array_type, constants, types)
-        for array_index in array_indexes:
-            array_limit = [0, 0]
-            for i in range(2):
-                array_limit[i] = self.get_number(array_index[i], constants, 0)
-            array_size = abs(array_limit[1] - array_limit[0]) + 1
-            array_total_size = array_total_size * array_size
+        for array_limit in self.get_array_limits(array_block, constants):
+            array_total_size = array_total_size * array_limit[2]
         return array_total_size
 
     def get_string_size(self, type_name, constants):
