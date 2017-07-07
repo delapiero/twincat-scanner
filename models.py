@@ -134,18 +134,18 @@ class TwinCatScanner:
         return types_copy
 
     def compute_type_size(self, type_name, types, constants):
-        twincat_type = types[type_name]
-        if not twincat_type['fields']:
-            return twincat_type['size']
-        else:
-            type_struct_size = 0
-            for field in twincat_type['fields']:
-                field_type = twincat_type['fields'][field]
-                if field_type in types:
-                    type_struct_size += self.compute_type_size(field_type, types, constants)
-                else:
-                    type_struct_size += self.get_size(field_type, constants, types)
-            return type_struct_size
+        if type_name in types:
+            twincat_type = types[type_name]
+            if twincat_type['fields']:
+                type_struct_size = 0
+                for field in twincat_type['fields']:
+                    field_type = twincat_type['fields'][field]
+                    if field_type in types:
+                        type_struct_size += self.compute_type_size(field_type, types, constants)
+                    else:
+                        type_struct_size += self.get_size(field_type, constants, types)
+                return type_struct_size
+        return self.get_size(type_name, constants, types)
 
     def scan_lines(self, lines, constants, types):
         self.notify("przetwarzam pliki")
@@ -169,6 +169,7 @@ class TwinCatScanner:
         self.notify("")
         return mem_areas, mem_map
 
+
     def get_mem_map_entry(self, var_name, offset, type_name, current_adr, constants, types):
         relative_adr = current_adr - offset
         if type_name.startswith("ARRAY"):
@@ -191,15 +192,16 @@ class TwinCatScanner:
                 entry = str(entry_val + array_limit[0]) + entry
             return var_name + "[" + entry + "]"
 
-        twincat_type = types[type_name]
-        if twincat_type['fields']:
-            field_offset = 0
-            for field in twincat_type['fields']:
-                field_type_name = twincat_type['fields'][field]
-                field_size = self.get_size(field_type_name, constants, types)
-                if relative_adr < field_offset + field_size:
-                    return self.get_mem_map_entry("{}.{}".format(var_name, field), offset + field_offset, field_type_name, current_adr, constants, types)
-                field_offset += field_size
+        if type_name in types:
+            twincat_type = types[type_name]
+            if twincat_type['fields']:
+                field_offset = 0
+                for field in twincat_type['fields']:
+                    field_type_name = twincat_type['fields'][field]
+                    field_size = self.get_size(field_type_name, constants, types)
+                    if relative_adr < field_offset + field_size:
+                        return self.get_mem_map_entry("{}.{}".format(var_name, field), offset + field_offset, field_type_name, current_adr, constants, types)
+                    field_offset += field_size
 
         return var_name
 

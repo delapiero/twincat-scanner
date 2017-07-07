@@ -2,6 +2,7 @@
 from tkinter import ttk
 from tkinter import filedialog
 from tkinter import messagebox
+import threading
 import models
 
 class Application(tk.Frame):
@@ -17,21 +18,32 @@ class Application(tk.Frame):
 
     def create_widgets(self):
 
-        self.dir_select = ttk.Button(self, text="Wybierz projekt", command=self.dir_select_command)
+        self.buttons = ttk.Frame(self)
+        self.buttons.grid(row=0, column=0, sticky=tk.NSEW)
+        self.buttons.columnconfigure(6, weight=1)
+        self.buttons.rowconfigure(1, weight=1)
+
+        self.dir_select = ttk.Button(self.buttons, text="Wybierz projekt", command=self.dir_select_command)
         self.dir_select.grid(row=0, column=0, sticky=tk.NSEW)
 
         self.dir = tk.StringVar()
         self.dir_path = ttk.Entry(self, textvariable=self.dir)
         self.dir_path.grid(row=1, column=0, sticky=tk.NSEW)
 
-        self.dir_process = ttk.Button(self, text="Wczytaj projekt", command=self.dir_process_command)
-        self.dir_process.grid(row=2, column=0, sticky=tk.NSEW)
+        self.dir_process = ttk.Button(self.buttons, text="Skanuj projekt", command=self.dir_process_command_async)
+        self.dir_process.grid(row=0, column=1, sticky=tk.NSEW)
+
+        self.export = ttk.Button(self.buttons, text="Zapisz projekt", command=self.csv_command)
+        self.export.grid(row=0, column=3, sticky=tk.NSEW)
+
+        self.select_type = ttk.Button(self.buttons, text="Typ", command=self.type_command, state='disabled')
+        self.select_type.grid(row=0, column=4, sticky=tk.NSEW)
+
+        self.select_mem_map = ttk.Button(self.buttons, text="Pamięć", command=self.mem_map_command, state='disabled')
+        self.select_mem_map.grid(row=0, column=5, sticky=tk.NSEW)
 
         self.quit = ttk.Button(self, text="Wyjście", command=ROOT.destroy)
         self.quit.grid(row=0, column=1, rowspan=2, sticky=tk.NSEW)
-
-        self.export = ttk.Button(self, text="CSV", command=self.csv_command)
-        self.export.grid(row=2, column=1, sticky=tk.NSEW)
 
         self.main_area = ttk.Notebook(self)
         self.main_area.grid(row=3, column=0, columnspan=2, sticky=tk.NSEW)
@@ -44,6 +56,7 @@ class Application(tk.Frame):
         self.memory_areas_list.column('#2', stretch=tk.NO, anchor=tk.CENTER)
         self.memory_areas_list.column('#3', stretch=tk.NO, anchor=tk.CENTER)
         self.memory_areas_list.column('#4', stretch=tk.YES, minwidth=10000)
+        self.memory_areas_list.bind('<<TreeviewSelect>>', self.memory_areas_select_command)
         self.memory_areas_items = []
 
         self.const_list = self.create_tab(self.main_area, self.tab_names[1], ("name", "value"))
@@ -100,15 +113,26 @@ class Application(tk.Frame):
         tmp_dir = filedialog.askdirectory()
         self.dir.set(tmp_dir)
 
+    def memory_areas_select_command(self, _):
+        state = 'normal' if self.memory_areas_list.selection() else 'disabled'
+        self.select_type['state'] = state
+        self.select_mem_map['state'] = state
+
     def dir_process_command(self):
         scanner = models.TwinCatScanner()
         scanner.notify = self.app_notify
         path = self.dir_path.get()
         memory_areas, constants, types, memory_map = scanner.run(path)
         self.load(memory_areas, types, constants, memory_map)
+        self.memory_areas_select_command(None)
+
+    def dir_process_command_async(self):
+        t = threading.Thread(target=self.dir_process_command)
+        t.daemon = True
+        t.start()
 
     def load(self, memory_areas, types, constants, memory_map):
-        self.load_memory_areas(memory_areas, types)
+        self.load_memory_areas(memory_areas)
         self.load_constants(constants)
         self.load_types(types)
         self.load_memory_map(memory_map)
@@ -145,23 +169,11 @@ class Application(tk.Frame):
                     self.insert_item(parent, treeview, items)
         treeview.insert(item[0], 'end', item[1], text=item[1], values=item[2])
 
-    def load_memory_areas(self, memory_areas, types):
+    def load_memory_areas(self, memory_areas):
         self.memory_areas_items.clear()
         for area in memory_areas:
-            self.load_memory_area('', area['var_name'], area['type_name'], area['offset'], area['size'], types)
-
-    def load_memory_area(self, parent_name, var_name, type_name, offset, size, types):
-        values = [str(offset), size, type_name, " " * offset + "#" * size]
-        self.memory_areas_items.append((parent_name, var_name, values))
-        if type_name in types:
-            twincat_type = types[type_name]
-            field_offset = offset
-            for field in twincat_type['fields']:
-                field_text = "{}.{}".format(var_name, field)
-                field_size = twincat_type['fields'][field]
-                field_type = types[field_size]
-                self.load_memory_area(var_name, field_text, field_size, field_offset, field_type['size'], types)
-                field_offset += field_type['size']
+            values = [str(area['offset']), area['size'], area['type_name'], " " * area['offset'] + "#" * area['size']]
+            self.memory_areas_items.append(('', area['var_name'], values))
 
     def load_constants(self, constants):
         self.const_items.clear()
@@ -196,7 +208,7 @@ class Application(tk.Frame):
         basename = os.path.basename(basedir)
         selected = self.main_area.index(self.main_area.select())
         filename = "{}_{}".format(basename, self.tab_names[selected])
-        csv = tk.filedialog.asksaveasfile(filetypes=[("csv files", "*.csv")], initialfile=filename)
+        csv = tk.filedialog.asksaveasfile(filetypes=[("csv files", "*.csv")], initialfile=filename, defaultextension=".csv")
         if csv is not None:
             if selected == 0:
                 self.csv_write(csv, self.memory_areas_list, self.csv_memory_areas)
@@ -222,6 +234,24 @@ class Application(tk.Frame):
 
     def csv_other(self, item):
         return "{};{};\n".format(item['text'], item['values'][0])
+
+    def type_command(self):
+        selection = self.memory_areas_list.selection()
+        if selection is not None:
+            selected_item = self.memory_areas_list.item(selection)
+            type_name = selected_item['values'][2]
+            if self.types_list.exists(type_name):
+                self.main_area.select(2)
+                self.types_list.selection_set(type_name)
+
+    def mem_map_command(self):
+        selection = self.memory_areas_list.selection()
+        if selection is not None:
+            selected_item = self.memory_areas_list.item(selection)
+            offset = selected_item['values'][0]
+            if self.mem_list.exists(offset):
+                self.main_area.select(3)
+                self.mem_list.selection_set(offset)
 
     def clear_filter_command(self):
         self.filter_var.set("")
