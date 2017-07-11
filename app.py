@@ -133,38 +133,26 @@ class Application(tk.Frame):
 
     def load(self, memory_areas, types, constants, memory_map):
         self.app_notify("ładowanie")
-        thrs = []
-        thrs.append(threading.Thread(target=self.load_memory_areas, args=[memory_areas]))
-        thrs.append(threading.Thread(target=self.load_constants, args=[constants]))
-        thrs.append(threading.Thread(target=self.load_types, args=[types]))
-        thrs.append(threading.Thread(target=self.load_memory_map, args=[memory_map]))
-        for thr in thrs:
-            thr.daemon = True
-            thr.start()
-        for thr in thrs:
-            thr.join()
+        self.load_memory_areas(memory_areas)
+        self.load_constants(constants)
+        self.load_types(types)
+        self.load_memory_map(memory_map)
         self.app_notify("")
-        self.refresh()
+        self.refresh_async()
 
     def refresh(self):
         self.app_notify("odświeżanie")
         text_filter = self.filter_var.get().upper()
-        text_data = (
-            (self.memory_areas_list, self.memory_areas_items),
-            (self.const_list, self.const_items),
-            (self.types_list, self.types_items),
-            (self.mem_list, self.mem_items))
-        thrs = []
-        for current_data in text_data:
-            thr_args = [current_data[0], current_data[1]]
-            thr_kwargs = {'text_filter': text_filter}
-            thrs.append(threading.Thread(target=self.refresh_list, args=thr_args, kwargs=thr_kwargs))
-        for thr in thrs:
-            thr.daemon = True
-            thr.start()
-        for thr in thrs:
-            thr.join()
+        self.refresh_list(self.memory_areas_list, self.memory_areas_items, text_filter=text_filter)
+        self.refresh_list(self.const_list, self.const_items, text_filter=text_filter)
+        self.refresh_list(self.types_list, self.types_items, text_filter=text_filter)
+        self.refresh_list(self.mem_list, self.mem_items, text_filter=text_filter)
         self.app_notify("")
+
+    def refresh_async(self):
+        thr = threading.Thread(target=self.refresh)
+        thr.daemon = True
+        thr.start()
 
     def refresh_list(self, treeview, items, text_filter=""):
         treeview.delete(*treeview.get_children())
@@ -254,22 +242,23 @@ class Application(tk.Frame):
         return "{};{};\n".format(item['text'], item['values'][0])
 
     def type_command(self):
-        selection = self.memory_areas_list.selection()
-        if selection is not None:
-            selected_item = self.memory_areas_list.item(selection)
-            type_name = selected_item['values'][2]
-            if self.types_list.exists(type_name):
-                self.main_area.select(2)
-                self.types_list.selection_set(type_name)
+        self.jump(self.types_list, 2, 2)
 
     def mem_map_command(self):
+        self.jump(self.mem_list, 3, 0)
+
+    def jump(self, treeview, treeview_index, value_index):
         selection = self.memory_areas_list.selection()
         if selection is not None:
             selected_item = self.memory_areas_list.item(selection)
-            offset = selected_item['values'][0]
-            if self.mem_list.exists(offset):
-                self.main_area.select(3)
-                self.mem_list.selection_set(offset)
+            selected_value = selected_item['values'][value_index]
+            if treeview.exists(selected_value):
+                self.main_area.select(treeview_index)
+                treeview.selection_set(selected_value)
+                value_index = treeview.index(treeview.selection())
+                value_count = len(treeview.get_children())
+                if value_count > 0:
+                    treeview.yview_moveto(value_index/value_count)
 
     def clear_filter_command(self):
         self.filter_var.set("")
