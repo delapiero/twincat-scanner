@@ -50,12 +50,12 @@ class Application(tk.Frame):
 
         self.tab_names = {0 : "Zmienne", 1 : "Stałe", 2 : "Typy", 3 : "Pamięć"}
 
-        self.memory_areas_list = self.create_tab(self.main_area, self.tab_names[0], ("name", "offset", "size", "type", "map"))
+        self.memory_areas_list = self.create_tab(self.main_area, self.tab_names[0], ("name", "offset", "size", "type", "overlap count"))
         self.memory_areas_list.column('#0', stretch=tk.NO)
         self.memory_areas_list.column('#1', stretch=tk.NO, anchor=tk.CENTER)
         self.memory_areas_list.column('#2', stretch=tk.NO, anchor=tk.CENTER)
         self.memory_areas_list.column('#3', stretch=tk.NO, anchor=tk.CENTER)
-        self.memory_areas_list.column('#4', stretch=tk.YES, minwidth=10000)
+        self.memory_areas_list.column('#4', stretch=tk.NO, anchor=tk.CENTER)
         self.memory_areas_list.bind('<<TreeviewSelect>>', self.memory_areas_select_command)
         self.memory_areas_items = []
 
@@ -178,8 +178,17 @@ class Application(tk.Frame):
     def load_memory_areas(self, memory_areas):
         self.memory_areas_items.clear()
         for area in memory_areas:
-            values = [str(area['offset']), area['size'], area['type_name'], " " * area['offset'] + "#" * area['size']]
+            count = len(list(filter(lambda x, y=area: self.memory_area_overlap(x, y), memory_areas))) - 1
+            values = [str(area['offset']), area['size'], area['type_name'], str(count)]
             self.memory_areas_items.append(('', area['var_name'], values))
+
+    def memory_area_overlap(self, area1, area2):
+        if area1['size'] and area2['size']:
+            r1 = range(area1['offset'], area1['offset'] + area1['size'])
+            r2 = range(area2['offset'], area2['offset'] + area2['size'])
+            return not ((r1[-1]<r2[0]) or (r2[-1]<r1[0]))
+        else:
+            return False
 
     def load_constants(self, constants):
         self.const_items.clear()

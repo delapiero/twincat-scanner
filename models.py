@@ -140,11 +140,15 @@ class TwinCatScanner:
                 type_struct_size = 0
                 for field in twincat_type['fields']:
                     field_type = twincat_type['fields'][field]
-                    if field_type in types:
-                        type_struct_size += self.compute_type_size(field_type, types, constants)
-                    else:
-                        type_struct_size += self.get_size(field_type, constants, types)
+                    type_struct_size += self.compute_type_size(field_type, types, constants)
                 return type_struct_size
+        elif type_name.startswith("ARRAY"):
+            array_block = self.array_pattern.match(type_name)
+            array_type = array_block[2]
+            array_total_size = self.compute_type_size(array_type, types, constants)
+            for array_limit in self.get_array_limits(array_block, constants):
+                array_total_size = array_total_size * array_limit[2]
+            return array_total_size
         return self.get_size(type_name, constants, types)
 
     def scan_lines(self, lines, constants, types):
