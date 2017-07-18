@@ -3,7 +3,7 @@ from tkinter import ttk
 from tkinter import filedialog
 from tkinter import messagebox
 import threading
-import models
+import twincatscanner
 
 class Application(tk.Frame):
 

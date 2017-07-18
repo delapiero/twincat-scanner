@@ -1,10 +1,10 @@
 import unittest
-import models
+import twincatscanner
 
 class TwinCatScannerTests(unittest.TestCase):
 
     def setUp(self):
-        self.scanner = models.TwinCatScanner()
+        self.scanner = twincatscanner.TwinCatScanner()
         self.constants = """
             VAR_GLOBAL CONSTANT
                 Const1 : INT := 1;
