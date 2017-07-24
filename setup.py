@@ -29,4 +29,4 @@ setup(  name = "ProgressTwinCatScanner",
         version = "0.1",
         description = "Get some basic info",
         options = {"build_exe": build_exe_options},
-        executables = [Executable("app.py", base=base)])
+        executables = [Executable("twincatscannergui.py", base=base)])
