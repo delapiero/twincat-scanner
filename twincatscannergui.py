@@ -119,7 +119,7 @@ class Application(tk.Frame):
         self.select_mem_map['state'] = state
 
     def dir_process_command(self):
-        scanner = models.TwinCatScanner()
+        scanner = twincatscanner.TwinCatScanner()
         scanner.notify = self.app_notify
         path = self.dir_path.get()
         memory_areas, constants, types, memory_map = scanner.run(path)
